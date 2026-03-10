@@ -473,6 +473,88 @@
       color: white;
     }
 
+    /* Upload area */
+    .upload-section {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .upload-drop {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition);
+      position: relative;
+    }
+    .upload-drop:hover, .upload-drop.dragover {
+      border-color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.05);
+    }
+    .upload-drop svg {
+      width: 32px;
+      height: 32px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .upload-drop .upload-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .upload-drop .upload-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .upload-drop input { display: none; }
+    .upload-progress {
+      margin-top: 10px;
+      display: none;
+    }
+    .upload-progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .upload-progress-fill {
+      height: 100%;
+      background: var(--gradient-blue);
+      border-radius: 2px;
+      transition: width 200ms;
+      width: 0%;
+    }
+    .upload-progress-text {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      text-align: center;
+    }
+
+    /* Delete button on ticket item */
+    .ticket-item {
+      position: relative;
+    }
+    .ticket-delete {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all var(--transition);
+    }
+    .ticket-item:hover .ticket-delete { opacity: 1; }
+    .ticket-delete:hover { color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
+
     /* Loading */
     .loading {
       display: flex;
@@ -504,6 +586,20 @@
       <div class="sidebar-header">
         <h1>TICKET DEBUGGER</h1>
         <p>FERRARI OCR Pipeline Inspector</p>
+      </div>
+      <div class="upload-section">
+        <div class="upload-drop" id="uploadDrop">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+          </svg>
+          <div class="upload-text">Upload Ticket Folder</div>
+          <div class="upload-hint">Click or drag folder here</div>
+          <input type="file" id="folderInput" webkitdirectory directory multiple>
+          <div class="upload-progress" id="uploadProgress">
+            <div class="upload-progress-bar"><div class="upload-progress-fill" id="uploadProgressFill"></div></div>
+            <div class="upload-progress-text" id="uploadProgressText"></div>
+          </div>
+        </div>
       </div>
       <div class="ticket-list" id="ticketList">
         <div class="loading"><div class="spinner"></div>Loading tickets...</div>
@@ -588,8 +684,15 @@
 
     function renderTicketList(tickets) {
       const el = document.getElementById('ticketList');
+      if (!tickets.length) {
+        el.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px;">No tickets yet. Upload a folder to start.</p>';
+        return;
+      }
       el.innerHTML = tickets.map(t => `
         <div class="ticket-item" data-id="${t.ticketId}" onclick="selectTicket('${t.ticketId}')">
+          <button class="ticket-delete" onclick="event.stopPropagation();deleteTicket('${t.ticketId}')" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
           <div class="ticket-id">${t.ticketId}</div>
           <div class="ticket-name">${t.name || 'Untitled'}</div>
           <div class="ticket-meta">
@@ -862,6 +965,121 @@
       const d = document.createElement('div');
       d.textContent = s;
       return d.innerHTML;
+    }
+
+    // --- Upload ---
+    const uploadDrop = document.getElementById('uploadDrop');
+    const folderInput = document.getElementById('folderInput');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const uploadProgressFill = document.getElementById('uploadProgressFill');
+    const uploadProgressText = document.getElementById('uploadProgressText');
+
+    uploadDrop.addEventListener('click', () => folderInput.click());
+
+    uploadDrop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadDrop.classList.add('dragover');
+    });
+    uploadDrop.addEventListener('dragleave', () => uploadDrop.classList.remove('dragover'));
+    uploadDrop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadDrop.classList.remove('dragover');
+      const items = e.dataTransfer.items;
+      if (items && items.length) {
+        // For folder drops, use webkitGetAsEntry
+        const entries = [];
+        for (let i = 0; i < items.length; i++) {
+          const entry = items[i].webkitGetAsEntry();
+          if (entry) entries.push(entry);
+        }
+        if (entries.length) {
+          collectFiles(entries).then(uploadFiles);
+        }
+      }
+    });
+
+    folderInput.addEventListener('change', () => {
+      if (folderInput.files.length) uploadFiles(folderInput.files);
+    });
+
+    async function collectFiles(entries) {
+      const files = [];
+      async function readEntry(entry, path) {
+        if (entry.isFile) {
+          const file = await new Promise(r => entry.file(r));
+          Object.defineProperty(file, 'webkitRelativePath', { value: path + file.name });
+          files.push(file);
+        } else if (entry.isDirectory) {
+          const reader = entry.createReader();
+          const subEntries = await new Promise(r => reader.readEntries(r));
+          for (const sub of subEntries) {
+            await readEntry(sub, path + entry.name + '/');
+          }
+        }
+      }
+      for (const e of entries) await readEntry(e, '');
+      return files;
+    }
+
+    async function uploadFiles(fileList) {
+      const files = Array.from(fileList);
+      if (!files.length) return;
+
+      uploadProgress.style.display = 'block';
+      uploadProgressFill.style.width = '0%';
+      uploadProgressText.textContent = `Uploading ${files.length} files...`;
+
+      const formData = new FormData();
+      for (const f of files) {
+        const path = f.webkitRelativePath || f.name;
+        formData.append('files', f, path);
+      }
+
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round(e.loaded / e.total * 100);
+            uploadProgressFill.style.width = pct + '%';
+            uploadProgressText.textContent = `Uploading... ${pct}%`;
+          }
+        });
+        await new Promise((resolve, reject) => {
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+            else reject(new Error(xhr.statusText));
+          };
+          xhr.onerror = () => reject(new Error('Upload failed'));
+          xhr.open('POST', '/api/upload');
+          xhr.send(formData);
+        });
+
+        uploadProgressFill.style.width = '100%';
+        uploadProgressText.textContent = 'Upload complete!';
+        setTimeout(() => { uploadProgress.style.display = 'none'; }, 2000);
+
+        // Refresh ticket list
+        folderInput.value = '';
+        const tickets = await fetchJSON('/api/tickets');
+        renderTicketList(tickets);
+      } catch (err) {
+        uploadProgressText.textContent = 'Upload failed: ' + err.message;
+        uploadProgressFill.style.width = '0%';
+      }
+    }
+
+    // --- Delete ---
+    async function deleteTicket(id) {
+      if (!confirm(`Delete ticket ${id}?`)) return;
+      await fetch(`/api/tickets/${id}`, { method: 'DELETE' });
+      if (currentTicket === id) {
+        currentTicket = null;
+        ticketData = null;
+        document.getElementById('ticketView').style.display = 'none';
+        document.getElementById('emptyState').style.display = '';
+      }
+      const tickets = await fetchJSON('/api/tickets');
+      renderTicketList(tickets);
     }
 
     // --- Start ---

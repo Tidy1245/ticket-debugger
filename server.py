@@ -1,15 +1,16 @@
-"""Ticket Debugger - FastAPI Backend Server"""
+"""Ticket Debugger - FastAPI Backend Server (Upload-based)"""
 
 import json
-import os
+import shutil
 from pathlib import Path
+from typing import List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
-TICKET_ROOT = Path(r"C:\Users\LordL\Desktop\ticket_test\ferrari\dst")
+UPLOAD_DIR = Path(__file__).parent / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(title="Ticket Debugger")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -20,18 +21,56 @@ async def index():
     return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
+@app.post("/api/upload")
+async def upload_ticket(files: List[UploadFile] = File(...)):
+    """Upload a ticket folder (multiple files with relative paths)."""
+    if not files:
+        raise HTTPException(400, "No files uploaded")
+
+    ticket_id = None
+    saved_files = []
+
+    for f in files:
+        # Browser sends webkitRelativePath as filename: "ticketId/file.jpg"
+        rel_path = f.filename.replace("\\", "/")
+        parts = rel_path.split("/")
+
+        # First directory is the ticket folder name
+        if ticket_id is None:
+            ticket_id = parts[0]
+
+        # Save file preserving subdirectory structure
+        dest = UPLOAD_DIR / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        content = await f.read()
+        dest.write_bytes(content)
+        saved_files.append(rel_path)
+
+    return {"ticketId": ticket_id, "fileCount": len(saved_files)}
+
+
+@app.delete("/api/tickets/{ticket_id}")
+async def delete_ticket(ticket_id: str):
+    """Delete an uploaded ticket."""
+    ticket_dir = UPLOAD_DIR / ticket_id
+    if not ticket_dir.exists():
+        raise HTTPException(404, "Ticket not found")
+    shutil.rmtree(ticket_dir)
+    return {"deleted": ticket_id}
+
+
 @app.get("/api/tickets")
 async def list_tickets():
-    """List all ticket IDs."""
-    if not TICKET_ROOT.exists():
-        raise HTTPException(404, "Ticket root directory not found")
+    """List all uploaded ticket IDs."""
+    if not UPLOAD_DIR.exists():
+        return []
     tickets = sorted(
-        [d.name for d in TICKET_ROOT.iterdir() if d.is_dir()],
+        [d.name for d in UPLOAD_DIR.iterdir() if d.is_dir()],
         reverse=True,
     )
     results = []
     for tid in tickets:
-        config_path = TICKET_ROOT / tid / "config.json"
+        config_path = UPLOAD_DIR / tid / "config.json"
         summary = {"ticketId": tid}
         if config_path.exists():
             try:
@@ -51,13 +90,12 @@ async def list_tickets():
 @app.get("/api/tickets/{ticket_id}")
 async def get_ticket(ticket_id: str):
     """Get full ticket config."""
-    config_path = TICKET_ROOT / ticket_id / "config.json"
+    config_path = UPLOAD_DIR / ticket_id / "config.json"
     if not config_path.exists():
         raise HTTPException(404, "Ticket not found")
     with open(config_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # Extract summary without the heavy regList details
     summary = {
         "ticketId": data.get("ticketId"),
         "project": data.get("project"),
@@ -109,7 +147,6 @@ async def get_ticket(ticket_id: str):
             "inputList": [inp.get("path") for inp in reg.get("inputList", [])],
             "oriInputList": [inp.get("path") for inp in reg.get("oriInputList", [])],
         }
-        # Count analyzer areas
         analyzer = reg.get("analyzer", {})
         page_info["areaCount"] = len(analyzer.get("areaList", []))
         pages.append(page_info)
@@ -121,7 +158,7 @@ async def get_ticket(ticket_id: str):
 @app.get("/api/tickets/{ticket_id}/pages/{page_index}/areas")
 async def get_page_areas(ticket_id: str, page_index: int):
     """Get analyzer areaList for a specific page."""
-    config_path = TICKET_ROOT / ticket_id / "config.json"
+    config_path = UPLOAD_DIR / ticket_id / "config.json"
     if not config_path.exists():
         raise HTTPException(404, "Ticket not found")
     with open(config_path, "r", encoding="utf-8") as f:
@@ -141,7 +178,7 @@ async def get_page_areas(ticket_id: str, page_index: int):
 @app.get("/tickets/{ticket_id}/images/{filename}")
 async def get_image(ticket_id: str, filename: str):
     """Serve ticket images."""
-    file_path = TICKET_ROOT / ticket_id / filename
+    file_path = UPLOAD_DIR / ticket_id / filename
     if not file_path.exists():
         raise HTTPException(404, "Image not found")
     return FileResponse(file_path, media_type="image/jpeg")
