@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ticket Debugger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: #1a1a2e;
+      --bg-card-hover: #1f1f35;
+      --bg-input: #16162a;
+      --border: #2a2a40;
+      --border-focus: #3b82f6;
+      --text-primary: #e8e8f0;
+      --text-secondary: #8888a8;
+      --text-muted: #5a5a78;
+      --accent-blue: #3b82f6;
+      --accent-blue-dim: #1e40af;
+      --accent-amber: #f59e0b;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-purple: #8b5cf6;
+      --gradient-blue: linear-gradient(135deg, #1e40af, #3b82f6);
+      --gradient-dark: linear-gradient(180deg, #0a0a0f 0%, #12121a 100%);
+      --gradient-card: linear-gradient(145deg, #1a1a2e, #16162a);
+      --glow-blue: 0 0 20px rgba(59, 130, 246, 0.15);
+      --glow-amber: 0 0 20px rgba(245, 158, 11, 0.15);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --transition: 200ms ease;
+    }
+
+    body {
+      font-family: 'Fira Sans', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-primary); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* Layout */
+    .app { display: flex; height: 100vh; overflow: hidden; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 340px;
+      min-width: 340px;
+      background: var(--gradient-dark);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header h1 {
+      font-family: 'Fira Code', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      background: var(--gradient-blue);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .sidebar-header p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .ticket-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    .ticket-item {
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition);
+      border: 1px solid transparent;
+      margin-bottom: 6px;
+    }
+    .ticket-item:hover {
+      background: var(--bg-card);
+      border-color: var(--border);
+    }
+    .ticket-item.active {
+      background: var(--bg-card);
+      border-color: var(--accent-blue);
+      box-shadow: var(--glow-blue);
+    }
+    .ticket-item .ticket-id {
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      color: var(--accent-blue);
+      font-weight: 500;
+    }
+    .ticket-item .ticket-name {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ticket-item .ticket-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Fira Code', monospace;
+    }
+    .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+    .badge-error { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+    .badge-type { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
+
+    /* Main content */
+    .main {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Tabs */
+    .tab-bar {
+      display: flex;
+      gap: 2px;
+      padding: 12px 24px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+    }
+    .tab {
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all var(--transition);
+      user-select: none;
+    }
+    .tab:hover { color: var(--text-secondary); }
+    .tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+    }
+
+    /* Content panels */
+    .content { flex: 1; overflow-y: auto; padding: 24px; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+    }
+    .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.3; }
+    .empty-state p { font-size: 14px; }
+
+    /* Info grid */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .info-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      transition: border-color var(--transition);
+    }
+    .info-card:hover { border-color: var(--accent-blue-dim); }
+    .info-card .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .info-card .value {
+      font-family: 'Fira Code', monospace;
+      font-size: 14px;
+      color: var(--text-primary);
+      word-break: break-all;
+    }
+
+    /* Section headers */
+    .section-header {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-header .count {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--accent-amber);
+      background: rgba(245, 158, 11, 0.1);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    /* Pipeline (appList) */
+    .pipeline {
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+      padding-bottom: 12px;
+      margin-bottom: 24px;
+    }
+    .pipeline-step {
+      min-width: 200px;
+      background: var(--gradient-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .pipeline-step:not(:last-child) { margin-right: 8px; }
+    .pipeline-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 6px solid var(--accent-blue-dim);
+      z-index: 1;
+    }
+    .pipeline-step .step-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent-blue);
+    }
+    .pipeline-step .step-module {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .pipeline-step .step-time {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--accent-amber);
+      margin-top: 8px;
+    }
+    .pipeline-step .step-version {
+      font-family: 'Fira Code', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Image viewer */
+    .image-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .image-controls select, .image-controls button {
+      font-family: 'Fira Sans', sans-serif;
+      font-size: 13px;
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .image-controls select:focus, .image-controls button:hover {
+      border-color: var(--accent-blue);
+      outline: none;
+    }
+    .btn-group {
+      display: flex;
+      gap: 4px;
+    }
+    .btn-group button.active {
+      background: var(--accent-blue-dim);
+      border-color: var(--accent-blue);
+      color: white;
+    }
+    .image-viewport {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: auto;
+      position: relative;
+      max-height: calc(100vh - 260px);
+    }
+    .image-viewport img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    .image-viewport.fit-width img { width: 100%; max-width: none; }
+    .image-viewport.original img { max-width: none; }
+
+    /* Overlay areas on image */
+    .image-container { position: relative; display: inline-block; }
+    .area-overlay {
+      position: absolute;
+      border: 1.5px solid rgba(59, 130, 246, 0.6);
+      background: rgba(59, 130, 246, 0.08);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .area-overlay:hover {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: var(--accent-blue);
+    }
+    .area-overlay.format-error {
+      border-color: rgba(239, 68, 68, 0.7);
+      background: rgba(239, 68, 68, 0.1);
+    }
+    .area-tooltip {
+      position: fixed;
+      background: var(--bg-card);
+      border: 1px solid var(--accent-blue);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--text-primary);
+      pointer-events: none;
+      z-index: 100;
+      max-width: 400px;
+      box-shadow: var(--glow-blue);
+      display: none;
+    }
+    .area-tooltip .tt-label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; }
+    .area-tooltip .tt-text { margin-top: 4px; word-break: break-all; }
+    .area-tooltip .tt-conf { color: var(--accent-amber); margin-top: 4px; }
+
+    /* Table */
+    .table-container {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      background: var(--bg-card);
+      color: var(--accent-blue);
+      font-weight: 600;
+      padding: 12px 14px;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 2px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition);
+    }
+    tbody tr:hover { background: var(--bg-card-hover); }
+    tbody td {
+      padding: 10px 14px;
+      color: var(--text-primary);
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      vertical-align: top;
+    }
+    tbody td.modified {
+      color: var(--accent-amber);
+    }
+    tbody td.error-cell {
+      color: var(--accent-red);
+      background: rgba(239, 68, 68, 0.05);
+    }
+    .cell-diff {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .cell-diff .original {
+      color: var(--text-muted);
+      text-decoration: line-through;
+      font-size: 11px;
+    }
+    .cell-diff .modified-val {
+      color: var(--accent-amber);
+    }
+    .conf-bar {
+      display: inline-block;
+      width: 40px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+    .conf-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width var(--transition);
+    }
+    .conf-high { background: var(--accent-green); }
+    .conf-mid { background: var(--accent-amber); }
+    .conf-low { background: var(--accent-red); }
+
+    /* Page navigation for images */
+    .page-nav {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .page-btn {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .page-btn:hover { border-color: var(--accent-blue-dim); color: var(--text-primary); }
+    .page-btn.active {
+      background: var(--accent-blue-dim);
+      border-color: var(--accent-blue);
+      color: white;
+    }
+
+    /* Loading */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--text-muted);
+    }
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>TICKET DEBUGGER</h1>
+        <p>FERRARI OCR Pipeline Inspector</p>
+      </div>
+      <div class="ticket-list" id="ticketList">
+        <div class="loading"><div class="spinner"></div>Loading tickets...</div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main" id="mainArea">
+      <div class="empty-state" id="emptyState">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <p>Select a ticket to inspect</p>
+      </div>
+      <div id="ticketView" style="display:none;">
+        <div class="tab-bar">
+          <div class="tab active" data-tab="overview">Overview</div>
+          <div class="tab" data-tab="images">Images</div>
+          <div class="tab" data-tab="table">Table Data</div>
+        </div>
+        <div class="content">
+          <!-- Overview Panel -->
+          <div class="panel active" id="panelOverview">
+            <div class="info-grid" id="infoGrid"></div>
+            <div class="section-header">Processing Pipeline <span class="count" id="pipelineCount"></span></div>
+            <div class="pipeline" id="pipeline"></div>
+          </div>
+
+          <!-- Images Panel -->
+          <div class="panel" id="panelImages">
+            <div class="image-controls">
+              <select id="imageType">
+                <option value="input">Input (Original)</option>
+                <option value="processor">Processor</option>
+                <option value="final" selected>Final</option>
+                <option value="result">Result</option>
+              </select>
+              <div class="btn-group">
+                <button id="btnFit" class="active" title="Fit to width">Fit</button>
+                <button id="btnOriginal" title="Original size">1:1</button>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                <input type="checkbox" id="showAreas" checked> Show OCR Areas
+              </label>
+            </div>
+            <div class="page-nav" id="pageNav"></div>
+            <div class="image-viewport fit-width" id="imageViewport">
+              <div class="image-container" id="imageContainer"></div>
+            </div>
+          </div>
+
+          <!-- Table Panel -->
+          <div class="panel" id="panelTable">
+            <div id="tableContent"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="area-tooltip" id="areaTooltip"></div>
+
+  <script>
+    const API = '';
+    let currentTicket = null;
+    let currentPageIndex = 0;
+    let ticketData = null;
+    let pageAreas = {};
+
+    // --- Fetch helpers ---
+    async function fetchJSON(url) {
+      const res = await fetch(API + url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    // --- Init ---
+    async function init() {
+      const tickets = await fetchJSON('/api/tickets');
+      renderTicketList(tickets);
+    }
+
+    function renderTicketList(tickets) {
+      const el = document.getElementById('ticketList');
+      el.innerHTML = tickets.map(t => `
+        <div class="ticket-item" data-id="${t.ticketId}" onclick="selectTicket('${t.ticketId}')">
+          <div class="ticket-id">${t.ticketId}</div>
+          <div class="ticket-name">${t.name || 'Untitled'}</div>
+          <div class="ticket-meta">
+            <span class="badge ${t.result === 0 ? 'badge-success' : 'badge-error'}">${t.result === 0 ? 'OK' : 'ERR'}</span>
+            <span class="badge badge-type">${t.expectType || ''}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function selectTicket(id) {
+      if (currentTicket === id) return;
+      currentTicket = id;
+      currentPageIndex = 0;
+      pageAreas = {};
+
+      // Update sidebar active state
+      document.querySelectorAll('.ticket-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.id === id);
+      });
+
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('ticketView').style.display = '';
+
+      // Show loading
+      document.getElementById('infoGrid').innerHTML = '<div class="loading"><div class="spinner"></div>Loading...</div>';
+
+      ticketData = await fetchJSON(`/api/tickets/${id}`);
+      renderOverview();
+      renderPageNav();
+      renderTable();
+      loadPageImage();
+    }
+
+    // --- Tabs ---
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(`panel${capitalize(tab.dataset.tab)}`).classList.add('active');
+      });
+    });
+
+    function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+    // --- Overview ---
+    function renderOverview() {
+      const d = ticketData;
+      const cards = [
+        { label: 'Ticket ID', value: d.ticketId },
+        { label: 'Project', value: d.project },
+        { label: 'Name', value: d.name },
+        { label: 'Type', value: d.expectType },
+        { label: 'Result', value: d.result === 0 ? 'Success' : `Error (${d.result})` },
+        { label: 'Error Message', value: d.errorMsg || 'None' },
+        { label: 'Total Pages', value: d.pages?.length || 0 },
+        { label: 'Table Rows', value: d.tables?.[0]?.rows?.length || 0 },
+      ];
+
+      document.getElementById('infoGrid').innerHTML = cards.map(c => `
+        <div class="info-card">
+          <div class="label">${c.label}</div>
+          <div class="value">${c.value}</div>
+        </div>
+      `).join('');
+
+      // Pipeline
+      const apps = d.appList || [];
+      document.getElementById('pipelineCount').textContent = `${apps.length} steps`;
+      document.getElementById('pipeline').innerHTML = apps.map(a => {
+        const ms = a.handleMs || 0;
+        const sec = (ms / 1000).toFixed(1);
+        return `
+          <div class="pipeline-step">
+            <div class="step-name">${a.name}</div>
+            <div class="step-module">${a.module || ''}</div>
+            <div class="step-time">${sec}s</div>
+            <div class="step-version">v${a.version || '?'}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // --- Images ---
+    function renderPageNav() {
+      const pages = ticketData.pages || [];
+      document.getElementById('pageNav').innerHTML = pages.map((p, i) => `
+        <button class="page-btn ${i === currentPageIndex ? 'active' : ''}" onclick="switchPage(${i})">
+          Page ${p.pageNdx + 1}
+        </button>
+      `).join('');
+    }
+
+    function switchPage(index) {
+      currentPageIndex = index;
+      renderPageNav();
+      loadPageImage();
+    }
+
+    async function loadPageImage() {
+      const page = ticketData.pages[currentPageIndex];
+      if (!page) return;
+      const type = document.getElementById('imageType').value;
+      let filename;
+
+      if (type === 'input') {
+        filename = page.oriInputList[0];
+      } else if (type === 'processor') {
+        filename = page.inputList[0];
+      } else if (type === 'final') {
+        filename = page.finalImgList?.[0];
+      } else if (type === 'result') {
+        filename = `_result_${page.inputList[0]}`;
+      }
+
+      if (!filename) {
+        document.getElementById('imageContainer').innerHTML = '<p style="padding:40px;color:var(--text-muted);">No image available</p>';
+        return;
+      }
+
+      const imgUrl = `/tickets/${currentTicket}/images/${filename}`;
+      const container = document.getElementById('imageContainer');
+
+      // Load areas if needed
+      if (!pageAreas[currentPageIndex]) {
+        try {
+          pageAreas[currentPageIndex] = await fetchJSON(`/api/tickets/${currentTicket}/pages/${currentPageIndex}/areas`);
+        } catch { pageAreas[currentPageIndex] = { areaList: [] }; }
+      }
+
+      container.innerHTML = `<img src="${imgUrl}" id="pageImg" onload="onImageLoad()" crossorigin="anonymous">`;
+    }
+
+    function onImageLoad() {
+      const showAreas = document.getElementById('showAreas').checked;
+      if (showAreas) renderAreaOverlays();
+    }
+
+    function renderAreaOverlays() {
+      const img = document.getElementById('pageImg');
+      if (!img) return;
+      const container = document.getElementById('imageContainer');
+
+      // Remove old overlays
+      container.querySelectorAll('.area-overlay').forEach(el => el.remove());
+
+      const areas = pageAreas[currentPageIndex]?.areaList || [];
+      if (!areas.length) return;
+
+      const scaleX = img.clientWidth / img.naturalWidth;
+      const scaleY = img.clientHeight / img.naturalHeight;
+
+      areas.forEach((area, i) => {
+        const div = document.createElement('div');
+        div.className = 'area-overlay' + (area.isFormatError ? ' format-error' : '');
+        div.style.left = (area.x * scaleX) + 'px';
+        div.style.top = (area.y * scaleY) + 'px';
+        div.style.width = (area.w * scaleX) + 'px';
+        div.style.height = (area.h * scaleY) + 'px';
+        div.dataset.index = i;
+        div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
+        div.addEventListener('mouseleave', hideAreaTooltip);
+        container.appendChild(div);
+      });
+    }
+
+    function showAreaTooltip(e, area) {
+      const tt = document.getElementById('areaTooltip');
+      const avgConf = area.confidence?.length
+        ? (area.confidence.reduce((a, b) => a + b, 0) / area.confidence.length * 100).toFixed(1)
+        : 'N/A';
+      const minConf = area.confidence?.length
+        ? (Math.min(...area.confidence) * 100).toFixed(1)
+        : 'N/A';
+      tt.innerHTML = `
+        <div class="tt-label">Area #${area.areaId ?? ''} · ${area.source || ''}</div>
+        <div class="tt-text">${area.text || '(empty)'}</div>
+        <div class="tt-conf">Avg: ${avgConf}% · Min: ${minConf}%</div>
+      `;
+      tt.style.display = 'block';
+      tt.style.left = (e.clientX + 12) + 'px';
+      tt.style.top = (e.clientY + 12) + 'px';
+    }
+
+    function hideAreaTooltip() {
+      document.getElementById('areaTooltip').style.display = 'none';
+    }
+
+    // Image controls
+    document.getElementById('imageType').addEventListener('change', loadPageImage);
+    document.getElementById('showAreas').addEventListener('change', () => {
+      const container = document.getElementById('imageContainer');
+      if (document.getElementById('showAreas').checked) {
+        renderAreaOverlays();
+      } else {
+        container.querySelectorAll('.area-overlay').forEach(el => el.remove());
+      }
+    });
+
+    document.getElementById('btnFit').addEventListener('click', () => {
+      document.getElementById('imageViewport').className = 'image-viewport fit-width';
+      document.getElementById('btnFit').classList.add('active');
+      document.getElementById('btnOriginal').classList.remove('active');
+      setTimeout(renderAreaOverlays, 50);
+    });
+    document.getElementById('btnOriginal').addEventListener('click', () => {
+      document.getElementById('imageViewport').className = 'image-viewport original';
+      document.getElementById('btnOriginal').classList.add('active');
+      document.getElementById('btnFit').classList.remove('active');
+      setTimeout(renderAreaOverlays, 50);
+    });
+
+    // --- Table ---
+    function renderTable() {
+      const tables = ticketData.tables || [];
+      if (!tables.length) {
+        document.getElementById('tableContent').innerHTML = '<p style="color:var(--text-muted);">No table data available</p>';
+        return;
+      }
+
+      const t = tables[0];
+      const headers = t.headers || [];
+      const rows = t.rows || [];
+
+      let html = `
+        <div class="section-header">${t.name || 'Table'} <span class="count">${rows.length} rows</span></div>
+        <div class="table-container">
+          <table>
+            <thead><tr>${headers.map(h => `<th title="${h.key}">${h.name || h.key}</th>`).join('')}</tr></thead>
+            <tbody>
+      `;
+
+      rows.forEach(row => {
+        html += '<tr>';
+        headers.forEach(h => {
+          const cell = row[h.key] || {};
+          const text = cell.text || '';
+          const textModify = cell.textModify || '';
+          const isModified = text !== textModify && textModify;
+          const isError = cell.isFormatError;
+          const avgConf = cell.confidence?.length
+            ? cell.confidence.reduce((a, b) => a + b, 0) / cell.confidence.length
+            : 1;
+          const confClass = avgConf >= 0.95 ? 'conf-high' : avgConf >= 0.8 ? 'conf-mid' : 'conf-low';
+
+          let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
+          let content;
+          if (isModified) {
+            content = `<div class="cell-diff"><span class="original">${escHtml(text)}</span><span class="modified-val">${escHtml(textModify)}</span></div>`;
+          } else {
+            content = escHtml(textModify || text);
+          }
+
+          // Confidence bar
+          const confBar = cell.confidence?.length
+            ? `<div class="conf-bar"><div class="conf-bar-fill ${confClass}" style="width:${avgConf * 100}%"></div></div>`
+            : '';
+
+          html += `<td class="${cellClass}">${content}${confBar}</td>`;
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+      document.getElementById('tableContent').innerHTML = html;
+    }
+
+    function escHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // --- Start ---
+    init();
+  </script>
+</body>
+</html>
