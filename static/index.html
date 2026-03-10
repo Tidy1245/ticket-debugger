@@ -167,9 +167,9 @@
     }
 
     /* Content panels */
-    .content { flex: 1; overflow-y: auto; padding: 24px; }
+    .content { flex: 1; overflow: hidden; padding: 24px; display: flex; flex-direction: column; }
     .panel { display: none; }
-    .panel.active { display: block; }
+    .panel.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
     /* Empty state */
     .empty-state {
@@ -334,6 +334,7 @@
       height: auto;
     }
     .image-viewport.fit-width img { width: 100%; max-width: none; }
+    .image-viewport.fit-page img { max-width: 100%; max-height: calc(100vh - 260px); object-fit: contain; }
     .image-viewport.original img { max-width: none; }
 
     /* Overlay areas on image */
@@ -374,9 +375,11 @@
 
     /* Table */
     .table-container {
-      overflow-x: auto;
+      overflow: auto;
       border: 1px solid var(--border);
       border-radius: var(--radius);
+      flex: 1;
+      min-height: 0;
     }
     table {
       width: 100%;
@@ -622,14 +625,14 @@
         </div>
         <div class="content">
           <!-- Overview Panel -->
-          <div class="panel active" id="panelOverview">
+          <div class="panel active" id="panelOverview" style="overflow-y:auto;">
             <div class="info-grid" id="infoGrid"></div>
             <div class="section-header">Processing Pipeline <span class="count" id="pipelineCount"></span></div>
             <div class="pipeline" id="pipeline"></div>
           </div>
 
           <!-- Images Panel -->
-          <div class="panel" id="panelImages">
+          <div class="panel" id="panelImages" style="overflow-y:auto;">
             <div class="image-controls">
               <select id="imageType">
                 <option value="input">Input (Original)</option>
@@ -638,7 +641,8 @@
                 <option value="result">Result</option>
               </select>
               <div class="btn-group">
-                <button id="btnFit" class="active" title="Fit to width">Fit</button>
+                <button id="btnFitPage" title="Fit full page">Page</button>
+                <button id="btnFit" class="active" title="Fit to width">Width</button>
                 <button id="btnOriginal" title="Original size">1:1</button>
               </div>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
@@ -893,18 +897,15 @@
       }
     });
 
-    document.getElementById('btnFit').addEventListener('click', () => {
-      document.getElementById('imageViewport').className = 'image-viewport fit-width';
-      document.getElementById('btnFit').classList.add('active');
-      document.getElementById('btnOriginal').classList.remove('active');
+    const viewBtns = ['btnFitPage', 'btnFit', 'btnOriginal'];
+    function setViewMode(mode, activeId) {
+      document.getElementById('imageViewport').className = 'image-viewport ' + mode;
+      viewBtns.forEach(id => document.getElementById(id).classList.toggle('active', id === activeId));
       setTimeout(renderAreaOverlays, 50);
-    });
-    document.getElementById('btnOriginal').addEventListener('click', () => {
-      document.getElementById('imageViewport').className = 'image-viewport original';
-      document.getElementById('btnOriginal').classList.add('active');
-      document.getElementById('btnFit').classList.remove('active');
-      setTimeout(renderAreaOverlays, 50);
-    });
+    }
+    document.getElementById('btnFitPage').addEventListener('click', () => setViewMode('fit-page', 'btnFitPage'));
+    document.getElementById('btnFit').addEventListener('click', () => setViewMode('fit-width', 'btnFit'));
+    document.getElementById('btnOriginal').addEventListener('click', () => setViewMode('original', 'btnOriginal'));
 
     // --- Table ---
     function renderTable() {
