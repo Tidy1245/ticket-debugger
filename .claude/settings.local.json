@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npm install -g uipro-cli 2>&1)",
+      "Bash(uipro init --ai claude 2>&1)",
+      "Bash(python -c \"\nimport json\nwith open\\('C:/Users/LordL/Desktop/ticket_test/ferrari/dst/260302145013Xjm6/config.json','r',encoding='utf-8'\\) as f:\n    data = json.load\\(f\\)\ninteg = data.get\\('integrator', {}\\)\nprint\\('integrator keys:', list\\(integ.keys\\(\\)\\) if isinstance\\(integ, dict\\) else type\\(integ\\)\\)\nif isinstance\\(integ, dict\\):\n    for k,v in integ.items\\(\\):\n        if isinstance\\(v, list\\):\n            print\\(f'  {k}: list of {len\\(v\\)}'\\)\n        elif isinstance\\(v, dict\\):\n            print\\(f'  {k}: dict with keys {list\\(v.keys\\(\\)\\)[:10]}'\\)\n        else:\n            print\\(f'  {k}: {type\\(v\\).__name__} = {str\\(v\\)[:100]}'\\)\n\" 2>&1)",
+      "Bash(python -c \"\nimport json\nwith open\\('C:/Users/LordL/Desktop/ticket_test/ferrari/dst/260302145013Xjm6/config.json','r',encoding='utf-8'\\) as f:\n    data = json.load\\(f\\)\ntl = data['integrator']['tableList']\nt = tl[0]\nprint\\('Table keys:', list\\(t.keys\\(\\)\\)\\)\nprint\\('name:', t.get\\('name'\\)\\)\nprint\\('headers count:', len\\(t.get\\('headers',[]\\)\\)\\)\nprint\\('headers:', json.dumps\\(t.get\\('headers',[]\\), ensure_ascii=False\\)[:500]\\)\nprint\\(\\)\nrows = t.get\\('rows', t.get\\('data', t.get\\('cells', []\\)\\)\\)\nprint\\('rows key candidates:', [k for k in t.keys\\(\\) if k not in ['name','headers']]\\)\nfor k,v in t.items\\(\\):\n    if isinstance\\(v, list\\):\n        print\\(f'  {k}: list of {len\\(v\\)}'\\)\n        if v and isinstance\\(v[0], dict\\):\n            print\\(f'    first item keys: {list\\(v[0].keys\\(\\)\\)[:10]}'\\)\n    else:\n        print\\(f'  {k}: {type\\(v\\).__name__} = {str\\(v\\)[:200]}'\\)\n\" 2>&1)",
+      "Bash(cd \"C:/sightour/ticket_debugger\" && python .claude/skills/ui-ux-pro-max/scripts/search.py \"dashboard data-viewer dark-mode professional industrial\" --design-system -p \"Ticket Debugger\" 2>&1)",
+      "Bash(pip install fastapi uvicorn 2>&1)",
+      "Bash(sleep 2 && curl -s http://localhost:9020/api/tickets 2>&1 | head -5)",
+      "Bash(curl -s http://localhost:9020/ 2>&1 | head -3)",
+      "Bash(sleep 2 && curl -s -o /dev/null -w \"%{http_code}\" http://localhost:9020/ 2>&1)",
+      "Bash(gh repo create sightify-ai/ticket-debugger --private --source=\"C:/sightour/ticket_debugger\" --push 2>&1)",
+      "Bash(git ls-remote https://github.com/sightify-ai/ticket-debugger.git 2>&1)"
+    ]
+  }
+}
