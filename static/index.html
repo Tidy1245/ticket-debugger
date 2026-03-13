@@ -777,6 +777,31 @@
       color: var(--text-muted);
       white-space: nowrap;
     }
+    .search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .search-wrap input { padding-right: 26px; }
+    .search-clear {
+      position: absolute;
+      right: 6px;
+      width: 16px;
+      height: 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      border-radius: 2px;
+    }
+    .search-clear:hover { color: var(--text-primary); }
+    .search-wrap input:not(:placeholder-shown) + .search-clear { display: flex; }
 
     /* Homepage */
     .homepage {
@@ -972,7 +997,10 @@
               </label>
               <div style="flex:1;"></div>
               <div class="search-bar">
-                <input type="text" id="ocrSearchInput" placeholder="Search OCR text...">
+                <div class="search-wrap">
+                  <input type="text" id="ocrSearchInput" placeholder="Search OCR text...">
+                  <button class="search-clear" id="ocrSearchClear">&times;</button>
+                </div>
                 <button class="search-nav-btn" id="ocrSearchPrev" title="Previous" disabled>&uarr;</button>
                 <button class="search-nav-btn" id="ocrSearchNext" title="Next" disabled>&darr;</button>
                 <span class="search-info" id="ocrSearchInfo"></span>
@@ -987,7 +1015,10 @@
           <!-- Table Panel -->
           <div class="panel" id="panelTable">
             <div class="search-bar" style="margin-bottom:10px;">
-              <input type="text" id="tableSearchInput" placeholder="Search table text...">
+              <div class="search-wrap">
+                <input type="text" id="tableSearchInput" placeholder="Search table text...">
+                <button class="search-clear" id="tableSearchClear">&times;</button>
+              </div>
               <span class="search-info" id="tableSearchInfo"></span>
             </div>
             <div id="tableContent" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;"></div>
@@ -1301,10 +1332,10 @@
         div.style.width = (area.w * scaleX * zoomLevel) + 'px';
         div.style.height = (area.h * scaleY * zoomLevel) + 'px';
         div.dataset.index = i;
-        if (showTexts) {
+        if (showTexts && (area.text || '')) {
           const label = document.createElement('span');
-          label.style.cssText = 'position:absolute;bottom:-16px;left:0;font-size:10px;font-family:Fira Code,monospace;color:var(--accent-green);white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 6px #000;max-width:200px;overflow:hidden;text-overflow:ellipsis;';
-          label.textContent = area.text || '';
+          label.style.cssText = 'position:absolute;bottom:-18px;left:0;font-size:10px;font-family:Fira Code,monospace;color:#fff;background:rgba(0,0,0,0.75);padding:1px 5px;border-radius:3px;white-space:nowrap;pointer-events:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;line-height:16px;';
+          label.textContent = area.text;
           div.appendChild(label);
         }
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
@@ -1477,6 +1508,12 @@
       clearTimeout(ocrSearchTimer);
       ocrSearchTimer = setTimeout(() => performOcrSearch(e.target.value.trim()), 300);
     });
+    document.getElementById('ocrSearchClear').addEventListener('click', () => {
+      const input = document.getElementById('ocrSearchInput');
+      input.value = '';
+      input.focus();
+      performOcrSearch('');
+    });
     document.getElementById('ocrSearchPrev').addEventListener('click', async () => {
       if (ocrSearchResults.length <= 1) return;
       ocrSearchCurrent = (ocrSearchCurrent - 1 + ocrSearchResults.length) % ocrSearchResults.length;
@@ -1636,6 +1673,13 @@
         renderTable();
       }, 300);
     });
+    document.getElementById('tableSearchClear').addEventListener('click', () => {
+      const input = document.getElementById('tableSearchInput');
+      input.value = '';
+      input.focus();
+      tableSearchQuery = '';
+      renderTable();
+    });
 
     // --- Upload ---
     const TICKET_NAME_RE = /^\d{12}[A-Za-z0-9]{4}$/;
@@ -1712,13 +1756,6 @@
       if (!files.length) return;
 
       if (uploadMode === 'single') {
-        // Validate ticket name (first path segment)
-        const firstPath = (files[0].webkitRelativePath || files[0].name).replace(/\\/g, '/');
-        const ticketName = firstPath.split('/')[0];
-        if (!TICKET_NAME_RE.test(ticketName)) {
-          alert(`Invalid ticket name: "${ticketName}"\nMust be 12 digits + 4 alphanumeric characters (e.g. 260302145013Xjm6)`);
-          return;
-        }
         uploadFiles(files);
       } else {
         // Batch mode: group files by top-level ticket folder
@@ -1733,21 +1770,29 @@
           groups[ticketName].push(f);
         }
 
-        const ticketNames = Object.keys(groups);
-        if (!ticketNames.length) {
+        const allNames = Object.keys(groups);
+        if (!allNames.length) {
           alert('No ticket subfolders found in the batch folder.');
           return;
         }
 
-        // Validate all ticket names
-        const invalid = ticketNames.filter(n => !TICKET_NAME_RE.test(n));
-        if (invalid.length) {
-          alert(`Invalid ticket name(s):\n${invalid.join('\n')}\n\nMust be 12 digits + 4 alphanumeric characters (e.g. 260302145013Xjm6)`);
+        // Filter to valid ticket names, warn about skipped
+        const valid = allNames.filter(n => TICKET_NAME_RE.test(n));
+        const invalid = allNames.filter(n => !TICKET_NAME_RE.test(n));
+
+        if (!valid.length) {
+          alert(`No valid tickets found.\nSkipped: ${invalid.join(', ')}\n\nTicket name must be 12 digits + 4 alphanumeric characters.`);
           return;
         }
 
-        // Upload each ticket sequentially
-        uploadBatch(groups, ticketNames);
+        if (invalid.length) {
+          alert(`Skipping ${invalid.length} invalid name(s):\n${invalid.join(', ')}\n\nUploading ${valid.length} valid ticket(s).`);
+        }
+
+        // Only upload valid tickets
+        const validGroups = {};
+        valid.forEach(n => { validGroups[n] = groups[n]; });
+        uploadBatch(validGroups, valid);
       }
     }
 
