@@ -338,12 +338,9 @@
       transform-origin: 0 0;
     }
     .image-viewport.fit-width img { width: 100%; max-width: none; }
-    .image-viewport.fit-page { display: flex; align-items: center; justify-content: center; }
-    .image-viewport.fit-page .image-container { display: flex; align-items: center; justify-content: center; }
-    .image-viewport.fit-page img { max-width: 100%; max-height: 100%; object-fit: contain; width: auto; }
-    .image-viewport.original img { max-width: none; }
-    .image-viewport.zoom-mode { cursor: grab; }
-    .image-viewport.zoom-mode img { max-width: none; width: auto; }
+    .image-viewport.fit-height img { max-width: none; height: 100%; width: auto; }
+    .image-viewport { cursor: grab; }
+    .image-viewport.dragging { cursor: grabbing; }
 
     /* Overlay areas on image */
     .image-container { position: relative; display: inline-block; }
@@ -662,16 +659,9 @@
           <!-- Images Panel -->
           <div class="panel" id="panelImages">
             <div class="image-controls">
-              <select id="imageType">
-                <option value="input">Input (Original)</option>
-                <option value="processor">Processor</option>
-                <option value="final" selected>Final</option>
-                <option value="result">Result</option>
-              </select>
               <div class="btn-group">
-                <button id="btnFitPage" title="Fit full page">Page</button>
-                <button id="btnFit" class="active" title="Fit to width">Width</button>
-                <button id="btnOriginal" title="Original size">1:1</button>
+                <button id="btnFit" class="active" title="Fit to width">Fit Width</button>
+                <button id="btnFitPage" title="Fit to height">Fit Height</button>
               </div>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
                 <input type="checkbox" id="showAreas" checked> Show OCR Areas
@@ -849,18 +839,7 @@
     async function loadPageImage() {
       const page = ticketData.pages[currentPageIndex];
       if (!page) return;
-      const type = document.getElementById('imageType').value;
-      let filename;
-
-      if (type === 'input') {
-        filename = page.oriInputList[0];
-      } else if (type === 'processor') {
-        filename = page.inputList[0];
-      } else if (type === 'final') {
-        filename = page.finalImgList?.[0];
-      } else if (type === 'result') {
-        filename = `_result_${page.inputList[0]}`;
-      }
+      const filename = page.oriInputList[0];
 
       if (!filename) {
         document.getElementById('imageContainer').innerHTML = '<p style="padding:40px;color:var(--text-muted);">No image available</p>';
@@ -899,9 +878,8 @@
       // Account for CSS display size and zoom transform
       const displayW = img.clientWidth;
       const displayH = img.clientHeight;
-      const z = currentViewMode === 'zoom-mode' ? zoomLevel : 1;
-      const scaleX = (displayW / img.naturalWidth) * z;
-      const scaleY = (displayH / img.naturalHeight) * z;
+      const scaleX = (displayW / img.naturalWidth) * zoomLevel;
+      const scaleY = (displayH / img.naturalHeight) * zoomLevel;
 
       areas.forEach((area, i) => {
         const div = document.createElement('div');
@@ -940,7 +918,6 @@
     }
 
     // Image controls
-    document.getElementById('imageType').addEventListener('change', loadPageImage);
     document.getElementById('showAreas').addEventListener('change', () => {
       const container = document.getElementById('imageContainer');
       if (document.getElementById('showAreas').checked) {
@@ -951,44 +928,64 @@
     });
 
     let currentViewMode = 'fit-width';
-    const viewBtns = ['btnFitPage', 'btnFit', 'btnOriginal'];
+    const viewBtns = ['btnFit', 'btnFitPage'];
     function setViewMode(mode, activeId) {
       currentViewMode = mode;
       zoomLevel = 1;
       const vp = document.getElementById('imageViewport');
       vp.className = 'image-viewport ' + mode;
       viewBtns.forEach(id => document.getElementById(id).classList.toggle('active', id === activeId));
-      // Reset transform
       const img = document.getElementById('pageImg');
       if (img) img.style.transform = '';
       setTimeout(() => { renderAreaOverlays(); updateZoomInfo(); }, 50);
     }
-    document.getElementById('btnFitPage').addEventListener('click', () => setViewMode('fit-page', 'btnFitPage'));
     document.getElementById('btnFit').addEventListener('click', () => setViewMode('fit-width', 'btnFit'));
-    document.getElementById('btnOriginal').addEventListener('click', () => setViewMode('original', 'btnOriginal'));
+    document.getElementById('btnFitPage').addEventListener('click', () => setViewMode('fit-height', 'btnFitPage'));
 
     // Scroll wheel zoom
-    document.getElementById('imageViewport').addEventListener('wheel', (e) => {
+    const imageViewport = document.getElementById('imageViewport');
+    imageViewport.addEventListener('wheel', (e) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
       zoomLevel = Math.max(0.1, Math.min(5, zoomLevel + delta));
 
-      const vp = document.getElementById('imageViewport');
       const img = document.getElementById('pageImg');
       if (!img) return;
-
-      // Switch to zoom mode
-      if (currentViewMode !== 'zoom-mode') {
-        currentViewMode = 'zoom-mode';
-        vp.className = 'image-viewport zoom-mode';
-        viewBtns.forEach(id => document.getElementById(id).classList.remove('active'));
-      }
 
       img.style.transform = `scale(${zoomLevel})`;
       img.style.transformOrigin = '0 0';
       updateZoomInfo();
       setTimeout(renderAreaOverlays, 50);
     }, { passive: false });
+
+    // Drag to pan
+    let isDragging = false;
+    let dragStartX = 0, dragStartY = 0, scrollStartX = 0, scrollStartY = 0;
+
+    imageViewport.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      scrollStartX = imageViewport.scrollLeft;
+      scrollStartY = imageViewport.scrollTop;
+      imageViewport.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      imageViewport.scrollLeft = scrollStartX - dx;
+      imageViewport.scrollTop = scrollStartY - dy;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      imageViewport.classList.remove('dragging');
+    });
 
     // --- Table ---
     function renderTable() {
