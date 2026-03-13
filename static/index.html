@@ -937,6 +937,9 @@
       updateZoomInfo();
     }
 
+    // Store processor image dimensions for coordinate scaling
+    let processorImgSize = null;
+
     async function loadPageImage() {
       const page = ticketData.pages[currentPageIndex];
       if (!page) return;
@@ -955,6 +958,18 @@
         try {
           pageAreas[currentPageIndex] = await fetchJSON(`/api/tickets/${currentTicket}/pages/${currentPageIndex}/areas`);
         } catch { pageAreas[currentPageIndex] = { areaList: [] }; }
+      }
+
+      // Preload processor image to get its dimensions (OCR coords are based on it)
+      processorImgSize = null;
+      const procFilename = page.inputList[0];
+      if (procFilename && procFilename !== filename) {
+        const procImg = new Image();
+        procImg.src = `/tickets/${currentTicket}/images/${procFilename}`;
+        procImg.onload = () => {
+          processorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
+          renderAreaOverlays(); // re-render with correct scale
+        };
       }
 
       container.innerHTML = `<img src="${imgUrl}" id="pageImg" crossorigin="anonymous">`;
@@ -984,13 +999,20 @@
       const padX = Math.max(0, (vw - scaledW) / 2);
       const padY = Math.max(0, (vh - scaledH) / 2);
 
+      // OCR coords are based on processor image; scale to displayed (ori) image
+      let scaleX = 1, scaleY = 1;
+      if (processorImgSize) {
+        scaleX = img.naturalWidth / processorImgSize.w;
+        scaleY = img.naturalHeight / processorImgSize.h;
+      }
+
       areas.forEach((area, i) => {
         const div = document.createElement('div');
         div.className = 'area-overlay' + (area.isFormatError ? ' format-error' : '');
-        div.style.left = (padX + area.x * zoomLevel) + 'px';
-        div.style.top = (padY + area.y * zoomLevel) + 'px';
-        div.style.width = (area.w * zoomLevel) + 'px';
-        div.style.height = (area.h * zoomLevel) + 'px';
+        div.style.left = (padX + area.x * scaleX * zoomLevel) + 'px';
+        div.style.top = (padY + area.y * scaleY * zoomLevel) + 'px';
+        div.style.width = (area.w * scaleX * zoomLevel) + 'px';
+        div.style.height = (area.h * scaleY * zoomLevel) + 'px';
         div.dataset.index = i;
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);

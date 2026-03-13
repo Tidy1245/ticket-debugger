@@ -15,7 +15,7 @@ UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Track last activity per IP for auto-cleanup
-SESSION_TIMEOUT = 10  # seconds
+SESSION_TIMEOUT = 24 * 60 * 60  # 24 hours (cleanup runs daily at 1 AM)
 ip_last_active: dict[str, float] = {}
 
 app = FastAPI(title="Ticket Debugger")
@@ -52,9 +52,19 @@ def cleanup_ip(ip: str):
 
 
 async def cleanup_loop():
-    """Background task to clean up expired sessions."""
+    """Background task to clean up expired sessions daily at 1 AM."""
     while True:
-        await asyncio.sleep(5)
+        # Calculate seconds until next 1:00 AM
+        now = time.time()
+        import datetime
+        dt_now = datetime.datetime.fromtimestamp(now)
+        target = dt_now.replace(hour=1, minute=0, second=0, microsecond=0)
+        if dt_now >= target:
+            target += datetime.timedelta(days=1)
+        wait_seconds = (target - dt_now).total_seconds()
+        await asyncio.sleep(wait_seconds)
+
+        # Clean up all IPs that haven't been active for SESSION_TIMEOUT
         now = time.time()
         expired = [ip for ip, ts in ip_last_active.items() if now - ts > SESSION_TIMEOUT]
         for ip in expired:
