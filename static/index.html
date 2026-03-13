@@ -66,6 +66,19 @@
     .sidebar-header {
       padding: 20px 20px 16px;
       border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .sidebar-header:hover { background: var(--bg-card); }
+    .sidebar-header .title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sidebar-header .title-icon {
+      position: relative;
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
     }
     .sidebar-header h1 {
       font-family: 'Fira Code', monospace;
@@ -663,6 +676,76 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Homepage */
+    .homepage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      padding: 60px 40px;
+      text-align: center;
+      gap: 40px;
+    }
+    .homepage-icon {
+      position: relative;
+      width: 80px;
+      height: 80px;
+    }
+    .homepage h2 {
+      font-family: 'Fira Code', monospace;
+      font-size: 28px;
+      font-weight: 700;
+      background: var(--gradient-blue);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .homepage .subtitle {
+      color: var(--text-secondary);
+      font-size: 15px;
+      margin-top: 8px;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      max-width: 800px;
+      width: 100%;
+    }
+    .feature-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 20px;
+      text-align: left;
+      transition: all var(--transition);
+    }
+    .feature-card:hover {
+      border-color: var(--accent-blue-dim);
+      box-shadow: var(--glow-blue);
+    }
+    .feature-card .feat-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .feature-card .feat-icon svg { width: 20px; height: 20px; }
+    .feature-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+    .feature-card p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
     }
@@ -672,8 +755,20 @@
   <div class="app">
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="sidebar-header">
-        <h1>TICKET DEBUGGER</h1>
+      <div class="sidebar-header" id="sidebarHeader" onclick="goHome()">
+        <div class="title-row">
+          <div class="title-icon">
+            <!-- Bug icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="1.5" style="position:absolute;left:0;top:0;width:18px;height:18px;">
+              <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 9V3"/><path d="M5.4 12H2"/><path d="M22 12h-3.4"/><path d="M6 6l1.8 1.8"/><path d="M16.2 7.8L18 6"/><path d="M6 18l1.8-1.8"/><path d="M16.2 16.2L18 18"/><path d="M12 15v6"/>
+            </svg>
+            <!-- Document icon -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="1.5" style="position:absolute;right:0;bottom:0;width:18px;height:18px;">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+          </div>
+          <h1>TICKET DEBUGGER</h1>
+        </div>
         <p>OCR Pipeline Inspector</p>
       </div>
       <div class="upload-section">
@@ -700,11 +795,49 @@
 
     <!-- Main -->
     <main class="main" id="mainArea">
-      <div class="empty-state" id="emptyState">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-        </svg>
-        <p>Select a ticket to inspect</p>
+      <div class="homepage" id="homePage">
+        <div>
+          <div class="homepage-icon" style="margin:0 auto 16px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="1.5" style="position:absolute;left:0;top:0;width:48px;height:48px;">
+              <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 9V3"/><path d="M5.4 12H2"/><path d="M22 12h-3.4"/><path d="M6 6l1.8 1.8"/><path d="M16.2 7.8L18 6"/><path d="M6 18l1.8-1.8"/><path d="M16.2 16.2L18 18"/><path d="M12 15v6"/>
+            </svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="1.5" style="position:absolute;right:0;bottom:0;width:48px;height:48px;">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+          </div>
+          <h2>Ticket Debugger</h2>
+          <p class="subtitle">OCR Pipeline Inspector &mdash; Upload tickets, inspect images, verify extracted data</p>
+        </div>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feat-icon" style="background:rgba(59,130,246,0.12);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+            </div>
+            <h3>Upload Tickets</h3>
+            <p>Drag & drop or click to upload ticket folders. Data is isolated per IP and auto-cleaned daily.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feat-icon" style="background:rgba(16,185,129,0.12);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2"><path d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <h3>Image Viewer</h3>
+            <p>View original images with OCR area overlays. Zoom, pan, and inspect per-character confidence.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feat-icon" style="background:rgba(245,158,11,0.12);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="2"><path d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-12.75A1.125 1.125 0 014.5 4.5h15a1.125 1.125 0 011.125 1.125v12.75m-18.75 0h18.75"/><path d="M9.75 8.25h4.5m-4.5 3h4.5m-4.5 3h4.5"/></svg>
+            </div>
+            <h3>Table Data</h3>
+            <p>Inspect extracted fields and table data with column toggles. Highlights modifications and format errors.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feat-icon" style="background:rgba(139,92,246,0.12);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2"><path d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z"/><path d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z"/></svg>
+            </div>
+            <h3>Pipeline Overview</h3>
+            <p>View processing results per page, track success/error status, and navigate the full OCR pipeline.</p>
+          </div>
+        </div>
       </div>
       <div id="ticketView" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
         <div class="tab-bar">
@@ -729,6 +862,9 @@
               </div>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
                 <input type="checkbox" id="showAreas" checked> Show OCR Areas
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                <input type="checkbox" id="showCoords"> Show Coords
               </label>
             </div>
             <div class="page-nav" id="pageNav"></div>
@@ -790,6 +926,13 @@
       `).join('');
     }
 
+    function goHome() {
+      currentTicket = null;
+      document.getElementById('ticketView').style.display = 'none';
+      document.getElementById('homePage').style.display = '';
+      document.querySelectorAll('.ticket-item').forEach(el => el.classList.remove('active'));
+    }
+
     async function selectTicket(id) {
       if (currentTicket === id) return;
       currentTicket = id;
@@ -802,7 +945,7 @@
         el.classList.toggle('active', el.dataset.id === id);
       });
 
-      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('homePage').style.display = 'none';
       document.getElementById('ticketView').style.display = 'flex';
 
       // Show loading
@@ -822,6 +965,14 @@
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById(`panel${capitalize(tab.dataset.tab)}`).classList.add('active');
+        // Re-apply zoom when switching to Images tab (viewport may have been hidden)
+        if (tab.dataset.tab === 'images') {
+          const img = document.getElementById('pageImg');
+          if (img && img.naturalWidth) {
+            zoomLevel = calcFitZoom(currentViewMode);
+            applyZoom();
+          }
+        }
       });
     });
 
@@ -1006,6 +1157,8 @@
         scaleY = img.naturalHeight / processorImgSize.h;
       }
 
+      const showCoords = document.getElementById('showCoords').checked;
+
       areas.forEach((area, i) => {
         const div = document.createElement('div');
         div.className = 'area-overlay' + (area.isFormatError ? ' format-error' : '');
@@ -1014,6 +1167,12 @@
         div.style.width = (area.w * scaleX * zoomLevel) + 'px';
         div.style.height = (area.h * scaleY * zoomLevel) + 'px';
         div.dataset.index = i;
+        if (showCoords) {
+          const label = document.createElement('span');
+          label.style.cssText = 'position:absolute;top:-16px;left:0;font-size:10px;font-family:Fira Code,monospace;color:var(--accent-amber);white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 6px #000;';
+          label.textContent = `(${area.x},${area.y},${area.w},${area.h})`;
+          div.appendChild(label);
+        }
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
         container.appendChild(div);
@@ -1053,6 +1212,7 @@
 
     // Image controls
     document.getElementById('showAreas').addEventListener('change', () => renderAreaOverlays());
+    document.getElementById('showCoords').addEventListener('change', () => renderAreaOverlays());
 
     const viewBtns = ['btnFit', 'btnFitPage'];
     function setViewMode(mode, activeId) {
