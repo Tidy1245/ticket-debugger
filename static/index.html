@@ -371,6 +371,17 @@
       border-color: rgba(239, 68, 68, 0.7);
       background: rgba(239, 68, 68, 0.1);
     }
+    .area-overlay.search-match {
+      border-color: rgba(245, 158, 11, 0.9);
+      background: rgba(245, 158, 11, 0.2);
+      z-index: 10;
+    }
+    .area-overlay.search-active {
+      border-color: #f59e0b;
+      background: rgba(245, 158, 11, 0.35);
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+      z-index: 11;
+    }
     .area-tooltip {
       position: fixed;
       background: var(--bg-card);
@@ -723,6 +734,50 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Search bar */
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .search-bar input {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      outline: none;
+      width: 180px;
+      transition: border-color var(--transition);
+    }
+    .search-bar input:focus { border-color: var(--accent-blue); }
+    .search-bar input::placeholder { color: var(--text-muted); }
+    .search-bar .search-nav-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all var(--transition);
+    }
+    .search-bar .search-nav-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+    .search-bar .search-nav-btn:disabled { opacity: 0.3; cursor: default; }
+    .search-bar .search-info {
+      font-family: 'Fira Code', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
     /* Homepage */
     .homepage {
       display: flex;
@@ -913,8 +968,15 @@
                 <input type="checkbox" id="showAreas" checked> Show OCR Areas
               </label>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
-                <input type="checkbox" id="showCoords"> Show Coords
+                <input type="checkbox" id="showTexts"> Show Texts
               </label>
+              <div style="flex:1;"></div>
+              <div class="search-bar">
+                <input type="text" id="ocrSearchInput" placeholder="Search OCR text...">
+                <button class="search-nav-btn" id="ocrSearchPrev" title="Previous" disabled>&uarr;</button>
+                <button class="search-nav-btn" id="ocrSearchNext" title="Next" disabled>&darr;</button>
+                <span class="search-info" id="ocrSearchInfo"></span>
+              </div>
             </div>
             <div class="page-nav" id="pageNav"></div>
             <div class="image-viewport" id="imageViewport">
@@ -924,6 +986,10 @@
 
           <!-- Table Panel -->
           <div class="panel" id="panelTable">
+            <div class="search-bar" style="margin-bottom:10px;">
+              <input type="text" id="tableSearchInput" placeholder="Search table text...">
+              <span class="search-info" id="tableSearchInfo"></span>
+            </div>
             <div id="tableContent" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;"></div>
           </div>
         </div>
@@ -991,6 +1057,13 @@
       currentPageIndex = 0;
       pageAreas = {};
       visibleColumns = null;
+      ocrSearchResults = [];
+      ocrSearchCurrent = -1;
+      tableSearchQuery = '';
+      document.getElementById('ocrSearchInput').value = '';
+      document.getElementById('ocrSearchInfo').textContent = '';
+      document.getElementById('tableSearchInput').value = '';
+      document.getElementById('tableSearchInfo').textContent = '';
 
       // Update sidebar active state
       document.querySelectorAll('.ticket-item').forEach(el => {
@@ -1209,20 +1282,29 @@
         scaleY = img.naturalHeight / processorImgSize.h;
       }
 
-      const showCoords = document.getElementById('showCoords').checked;
+      const showTexts = document.getElementById('showTexts').checked;
 
       areas.forEach((area, i) => {
         const div = document.createElement('div');
-        div.className = 'area-overlay' + (area.isFormatError ? ' format-error' : '');
+        let cls = 'area-overlay';
+        if (area.isFormatError) cls += ' format-error';
+        // Search highlight
+        const isMatch = ocrSearchResults.some(r => r.pageIndex === currentPageIndex && r.areaIndex === i);
+        const isActive = ocrSearchResults.length > 0 && ocrSearchCurrent < ocrSearchResults.length
+          && ocrSearchResults[ocrSearchCurrent].pageIndex === currentPageIndex
+          && ocrSearchResults[ocrSearchCurrent].areaIndex === i;
+        if (isActive) cls += ' search-active';
+        else if (isMatch) cls += ' search-match';
+        div.className = cls;
         div.style.left = (padX + area.x * scaleX * zoomLevel) + 'px';
         div.style.top = (padY + area.y * scaleY * zoomLevel) + 'px';
         div.style.width = (area.w * scaleX * zoomLevel) + 'px';
         div.style.height = (area.h * scaleY * zoomLevel) + 'px';
         div.dataset.index = i;
-        if (showCoords) {
+        if (showTexts) {
           const label = document.createElement('span');
-          label.style.cssText = 'position:absolute;top:-16px;left:0;font-size:10px;font-family:Fira Code,monospace;color:var(--accent-amber);white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 6px #000;';
-          label.textContent = `(${area.x},${area.y},${area.w},${area.h})`;
+          label.style.cssText = 'position:absolute;bottom:-16px;left:0;font-size:10px;font-family:Fira Code,monospace;color:var(--accent-green);white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 6px #000;max-width:200px;overflow:hidden;text-overflow:ellipsis;';
+          label.textContent = area.text || '';
           div.appendChild(label);
         }
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
@@ -1265,7 +1347,7 @@
 
     // Image controls
     document.getElementById('showAreas').addEventListener('change', () => renderAreaOverlays());
-    document.getElementById('showCoords').addEventListener('change', () => renderAreaOverlays());
+    document.getElementById('showTexts').addEventListener('change', () => renderAreaOverlays());
 
     const viewBtns = ['btnFit', 'btnFitPage'];
     function setViewMode(mode, activeId) {
@@ -1316,37 +1398,149 @@
       imageViewport.classList.remove('dragging');
     });
 
+    // --- OCR Search ---
+    let ocrSearchResults = []; // [{pageIndex, areaIndex, text}]
+    let ocrSearchCurrent = -1;
+
+    async function ensureAllAreasLoaded() {
+      const pages = ticketData.pages || [];
+      const promises = [];
+      for (let i = 0; i < pages.length; i++) {
+        if (!pageAreas[i]) {
+          promises.push(
+            fetchJSON(`/api/tickets/${currentTicket}/pages/${i}/areas`)
+              .then(data => { pageAreas[i] = data; })
+              .catch(() => { pageAreas[i] = { areaList: [] }; })
+          );
+        }
+      }
+      await Promise.all(promises);
+    }
+
+    async function performOcrSearch(query) {
+      ocrSearchResults = [];
+      ocrSearchCurrent = -1;
+      if (!query || !ticketData) {
+        updateOcrSearchUI();
+        renderAreaOverlays();
+        return;
+      }
+      await ensureAllAreasLoaded();
+      const q = query.toLowerCase();
+      const pages = ticketData.pages || [];
+      for (let pi = 0; pi < pages.length; pi++) {
+        const areas = pageAreas[pi]?.areaList || [];
+        for (let ai = 0; ai < areas.length; ai++) {
+          const text = (areas[ai].text || '').toLowerCase();
+          if (text.includes(q)) {
+            ocrSearchResults.push({ pageIndex: pi, areaIndex: ai, text: areas[ai].text });
+          }
+        }
+      }
+      if (ocrSearchResults.length > 0) {
+        ocrSearchCurrent = 0;
+        await goToOcrResult();
+      }
+      updateOcrSearchUI();
+    }
+
+    async function goToOcrResult() {
+      if (ocrSearchCurrent < 0 || ocrSearchCurrent >= ocrSearchResults.length) return;
+      const r = ocrSearchResults[ocrSearchCurrent];
+      if (r.pageIndex !== currentPageIndex) {
+        currentPageIndex = r.pageIndex;
+        renderPageNav();
+        await loadPageImage();
+      } else {
+        renderAreaOverlays();
+      }
+    }
+
+    function updateOcrSearchUI() {
+      const info = document.getElementById('ocrSearchInfo');
+      const prevBtn = document.getElementById('ocrSearchPrev');
+      const nextBtn = document.getElementById('ocrSearchNext');
+      if (ocrSearchResults.length > 0) {
+        info.textContent = `${ocrSearchCurrent + 1}/${ocrSearchResults.length}`;
+        prevBtn.disabled = ocrSearchResults.length <= 1;
+        nextBtn.disabled = ocrSearchResults.length <= 1;
+      } else {
+        const q = document.getElementById('ocrSearchInput').value;
+        info.textContent = q ? 'No result' : '';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+      }
+    }
+
+    let ocrSearchTimer = null;
+    document.getElementById('ocrSearchInput').addEventListener('input', (e) => {
+      clearTimeout(ocrSearchTimer);
+      ocrSearchTimer = setTimeout(() => performOcrSearch(e.target.value.trim()), 300);
+    });
+    document.getElementById('ocrSearchPrev').addEventListener('click', async () => {
+      if (ocrSearchResults.length <= 1) return;
+      ocrSearchCurrent = (ocrSearchCurrent - 1 + ocrSearchResults.length) % ocrSearchResults.length;
+      await goToOcrResult();
+      updateOcrSearchUI();
+    });
+    document.getElementById('ocrSearchNext').addEventListener('click', async () => {
+      if (ocrSearchResults.length <= 1) return;
+      ocrSearchCurrent = (ocrSearchCurrent + 1) % ocrSearchResults.length;
+      await goToOcrResult();
+      updateOcrSearchUI();
+    });
+
     // --- Table ---
     let visibleColumns = null; // null = all visible
+    let tableSearchQuery = '';
 
     function renderTable() {
       const areas = ticketData.areas || [];
       const tables = ticketData.tables || [];
+      const q = tableSearchQuery.toLowerCase();
 
       if (!areas.length && !tables.length) {
         document.getElementById('tableContent').innerHTML = '<p style="color:var(--text-muted);">No table data available</p>';
+        document.getElementById('tableSearchInfo').textContent = '';
         return;
       }
 
       let html = '';
 
-      // Render areaList as key-value grid
+      // Render areaList as key-value grid (filter by search)
       if (areas.length) {
-        html += `<div class="section-header" style="flex-shrink:0;">Fields <span class="count">${areas.length}</span></div>`;
-        html += '<div class="area-grid">';
-        areas.forEach(a => {
-          const value = a.text || a.textOCR || '';
-          const label = a.name || a.key;
-          html += `<div class="area-item"><span class="area-label">${escHtml(label)}</span><span class="area-value">${escHtml(value)}</span></div>`;
-        });
-        html += '</div>';
+        const filteredAreas = q ? areas.filter(a => {
+          const val = (a.text || a.textOCR || '').toLowerCase();
+          const label = (a.name || a.key || '').toLowerCase();
+          return val.includes(q) || label.includes(q);
+        }) : areas;
+        html += `<div class="section-header" style="flex-shrink:0;">Fields <span class="count">${filteredAreas.length}</span></div>`;
+        if (filteredAreas.length) {
+          html += '<div class="area-grid">';
+          filteredAreas.forEach(a => {
+            const value = a.text || a.textOCR || '';
+            const label = a.name || a.key;
+            html += `<div class="area-item"><span class="area-label">${escHtml(label)}</span><span class="area-value">${escHtml(value)}</span></div>`;
+          });
+          html += '</div>';
+        }
       }
 
       // Render tableList
       if (tables.length) {
         const t = tables[0];
         const headers = t.headers || [];
-        const rows = t.rows || [];
+        const allRows = t.rows || [];
+
+        // Filter rows by search query
+        const rows = q ? allRows.filter(row => {
+          return headers.some(h => {
+            const cell = row[h.key] || {};
+            const text = (cell.text || '').toLowerCase();
+            const textMod = (cell.textModify || '').toLowerCase();
+            return text.includes(q) || textMod.includes(q);
+          });
+        }) : allRows;
 
         // Init visible columns (all on first load)
         if (visibleColumns === null) {
@@ -1354,42 +1548,64 @@
         }
 
         html += `
-          <div class="section-header" style="flex-shrink:0;">${t.name || 'Table'} <span class="count">${rows.length} rows</span></div>
+          <div class="section-header" style="flex-shrink:0;">${t.name || 'Table'} <span class="count">${rows.length}${q ? '/' + allRows.length : ''} rows</span></div>
           <div class="col-toggles">
             ${headers.map(h => `<span class="col-toggle ${visibleColumns.has(h.key) ? 'active' : ''}" data-col="${h.key}">${h.name || h.text || h.key}</span>`).join('')}
           </div>
-          <div class="table-container" style="flex:1;min-height:0;overflow:auto;">
-            <table>
-              <thead><tr>${headers.filter(h => visibleColumns.has(h.key)).map(h => `<th title="${h.key}">${h.name || h.text || h.key}</th>`).join('')}</tr></thead>
-              <tbody>
         `;
 
-        rows.forEach(row => {
-          html += '<tr>';
-          headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
-            const cell = row[h.key] || {};
-            const text = cell.text || '';
-            const textModify = cell.textModify || '';
-            const isModified = text !== textModify && textModify;
-            const isError = cell.isFormatError;
+        if (rows.length === 0 && q) {
+          html += '<p style="color:var(--text-muted);padding:20px;text-align:center;">No Result</p>';
+        } else {
+          html += `
+            <div class="table-container" style="flex:1;min-height:0;overflow:auto;">
+              <table>
+                <thead><tr>${headers.filter(h => visibleColumns.has(h.key)).map(h => `<th title="${h.key}">${h.name || h.text || h.key}</th>`).join('')}</tr></thead>
+                <tbody>
+          `;
 
-            let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
-            let content;
-            if (isModified) {
-              content = `<div class="cell-diff"><span class="original">${escHtml(text)}</span><span class="modified-val">${escHtml(textModify)}</span></div>`;
-            } else {
-              content = escHtml(textModify || text);
-            }
+          rows.forEach(row => {
+            html += '<tr>';
+            headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
+              const cell = row[h.key] || {};
+              const text = cell.text || '';
+              const textModify = cell.textModify || '';
+              const isModified = text !== textModify && textModify;
+              const isError = cell.isFormatError;
 
-            html += `<td class="${cellClass}">${content}</td>`;
+              let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
+              let content;
+              if (isModified) {
+                content = `<div class="cell-diff"><span class="original">${escHtml(text)}</span><span class="modified-val">${escHtml(textModify)}</span></div>`;
+              } else {
+                content = escHtml(textModify || text);
+              }
+
+              html += `<td class="${cellClass}">${content}</td>`;
+            });
+            html += '</tr>';
           });
-          html += '</tr>';
-        });
 
-        html += '</tbody></table></div>';
+          html += '</tbody></table></div>';
+        }
       }
 
       document.getElementById('tableContent').innerHTML = html;
+
+      // Search info
+      const infoEl = document.getElementById('tableSearchInfo');
+      if (q && tables.length) {
+        const allRows = tables[0].rows || [];
+        const filtered = q ? allRows.filter(row => {
+          return (tables[0].headers || []).some(h => {
+            const cell = row[h.key] || {};
+            return (cell.text || '').toLowerCase().includes(q) || (cell.textModify || '').toLowerCase().includes(q);
+          });
+        }).length : allRows.length;
+        infoEl.textContent = `${filtered}/${allRows.length} rows`;
+      } else {
+        infoEl.textContent = '';
+      }
 
       // Attach toggle listeners
       document.querySelectorAll('.col-toggle').forEach(el => {
@@ -1410,6 +1626,16 @@
       d.textContent = s;
       return d.innerHTML;
     }
+
+    // Table search
+    let tableSearchTimer = null;
+    document.getElementById('tableSearchInput').addEventListener('input', (e) => {
+      clearTimeout(tableSearchTimer);
+      tableSearchTimer = setTimeout(() => {
+        tableSearchQuery = e.target.value.trim();
+        renderTable();
+      }, 300);
+    });
 
     // --- Upload ---
     const TICKET_NAME_RE = /^\d{12}[A-Za-z0-9]{4}$/;
