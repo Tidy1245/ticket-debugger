@@ -372,7 +372,12 @@
     }
     .area-tooltip .tt-label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; }
     .area-tooltip .tt-text { margin-top: 4px; word-break: break-all; }
-    .area-tooltip .tt-conf { color: var(--accent-amber); margin-top: 4px; }
+    .area-tooltip .tt-chars {
+      margin-top: 4px;
+      font-size: 14px;
+      letter-spacing: 1px;
+      word-break: break-all;
+    }
 
     /* Table */
     .table-container {
@@ -587,6 +592,27 @@
     .ticket-item:hover .ticket-delete { opacity: 1; }
     .ticket-delete:hover { color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
 
+    /* Delete all button */
+    .delete-all-bar {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      display: none;
+    }
+    .delete-all-btn {
+      width: 100%;
+      padding: 7px 12px;
+      font-family: 'Fira Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: var(--radius-sm);
+      background: rgba(239, 68, 68, 0.08);
+      color: var(--accent-red);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .delete-all-btn:hover { background: rgba(239, 68, 68, 0.15); border-color: var(--accent-red); }
+
     /* Loading */
     .loading {
       display: flex;
@@ -632,6 +658,9 @@
             <div class="upload-progress-text" id="uploadProgressText"></div>
           </div>
         </div>
+      </div>
+      <div class="delete-all-bar" id="deleteAllBar">
+        <button class="delete-all-btn" onclick="deleteAllTickets()">Delete All Tickets</button>
       </div>
       <div class="ticket-list" id="ticketList">
         <div class="loading"><div class="spinner"></div>Loading tickets...</div>
@@ -710,6 +739,7 @@
 
     function renderTicketList(tickets) {
       const el = document.getElementById('ticketList');
+      document.getElementById('deleteAllBar').style.display = tickets.length ? 'block' : 'none';
       if (!tickets.length) {
         el.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px;">No tickets yet. Upload a folder to start.</p>';
         return;
@@ -938,16 +968,25 @@
 
     function showAreaTooltip(e, area) {
       const tt = document.getElementById('areaTooltip');
-      const avgConf = area.confidence?.length
-        ? (area.confidence.reduce((a, b) => a + b, 0) / area.confidence.length * 100).toFixed(1)
-        : 'N/A';
-      const minConf = area.confidence?.length
-        ? (Math.min(...area.confidence) * 100).toFixed(1)
-        : 'N/A';
+      const text = area.text || '';
+      const conf = area.confidence || [];
+
+      // Build per-character confidence display
+      let charHtml = '';
+      if (text && conf.length) {
+        charHtml = '<div class="tt-chars">';
+        for (let i = 0; i < text.length; i++) {
+          const c = conf[i] !== undefined ? conf[i] : 1;
+          const pct = (c * 100).toFixed(0);
+          const color = c >= 0.95 ? 'var(--accent-green)' : c >= 0.8 ? 'var(--accent-amber)' : 'var(--accent-red)';
+          charHtml += `<span style="color:${color}" title="${pct}%">${escHtml(text[i])}</span>`;
+        }
+        charHtml += '</div>';
+      }
+
       tt.innerHTML = `
         <div class="tt-label">Area #${area.areaId ?? ''} · ${area.source || ''}</div>
-        <div class="tt-text">${area.text || '(empty)'}</div>
-        <div class="tt-conf">Avg: ${avgConf}% · Min: ${minConf}%</div>
+        ${charHtml || `<div class="tt-text">(empty)</div>`}
       `;
       tt.style.display = 'block';
       tt.style.left = (e.clientX + 12) + 'px';
@@ -1200,6 +1239,23 @@
       const tickets = await fetchJSON('/api/tickets');
       renderTicketList(tickets);
     }
+
+    // --- Delete All ---
+    async function deleteAllTickets() {
+      if (!confirm('Delete all tickets?')) return;
+      await fetch('/api/tickets', { method: 'DELETE' });
+      currentTicket = null;
+      ticketData = null;
+      document.getElementById('ticketView').style.display = 'none';
+      document.getElementById('emptyState').style.display = '';
+      const tickets = await fetchJSON('/api/tickets');
+      renderTicketList(tickets);
+    }
+
+    // --- Heartbeat (keep session alive while page is open) ---
+    setInterval(() => {
+      fetch('/api/heartbeat', { method: 'POST' }).catch(() => {});
+    }, 5000);
 
     // --- Start ---
     init();

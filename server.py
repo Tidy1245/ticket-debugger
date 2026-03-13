@@ -1,19 +1,69 @@
-"""Ticket Debugger - FastAPI Backend Server (Upload-based)"""
+"""Ticket Debugger - FastAPI Backend Server (IP-isolated uploads)"""
 
+import asyncio
 import json
 import shutil
+import time
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
+# Track last activity per IP for auto-cleanup
+SESSION_TIMEOUT = 10  # seconds
+ip_last_active: dict[str, float] = {}
+
 app = FastAPI(title="Ticket Debugger")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+def get_ip(request: Request) -> str:
+    """Get client IP, supporting X-Forwarded-For."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host
+
+
+def ip_dir(ip: str) -> Path:
+    """Get the upload directory for an IP."""
+    safe_ip = ip.replace(":", "_").replace(".", "_")
+    d = UPLOAD_DIR / safe_ip
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def touch_ip(ip: str):
+    """Update last active timestamp for an IP."""
+    ip_last_active[ip] = time.time()
+
+
+def cleanup_ip(ip: str):
+    """Remove all uploads for an IP."""
+    d = ip_dir(ip)
+    if d.exists():
+        shutil.rmtree(d, ignore_errors=True)
+    ip_last_active.pop(ip, None)
+
+
+async def cleanup_loop():
+    """Background task to clean up expired sessions."""
+    while True:
+        await asyncio.sleep(5)
+        now = time.time()
+        expired = [ip for ip, ts in ip_last_active.items() if now - ts > SESSION_TIMEOUT]
+        for ip in expired:
+            cleanup_ip(ip)
+
+
+@app.on_event("startup")
+async def start_cleanup():
+    asyncio.create_task(cleanup_loop())
 
 
 @app.get("/")
@@ -21,26 +71,33 @@ async def index():
     return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
+@app.post("/api/heartbeat")
+async def heartbeat(request: Request):
+    """Keep session alive."""
+    ip = get_ip(request)
+    touch_ip(ip)
+    return {"ok": True}
+
+
 @app.post("/api/upload")
-async def upload_ticket(files: List[UploadFile] = File(...)):
-    """Upload a ticket folder (multiple files with relative paths)."""
+async def upload_ticket(request: Request, files: List[UploadFile] = File(...)):
+    """Upload a ticket folder."""
     if not files:
         raise HTTPException(400, "No files uploaded")
 
+    ip = get_ip(request)
+    touch_ip(ip)
+    base = ip_dir(ip)
     ticket_id = None
     saved_files = []
 
     for f in files:
-        # Browser sends webkitRelativePath as filename: "ticketId/file.jpg"
         rel_path = f.filename.replace("\\", "/")
         parts = rel_path.split("/")
-
-        # First directory is the ticket folder name
         if ticket_id is None:
             ticket_id = parts[0]
 
-        # Save file preserving subdirectory structure
-        dest = UPLOAD_DIR / rel_path
+        dest = base / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
         content = await f.read()
         dest.write_bytes(content)
@@ -50,27 +107,47 @@ async def upload_ticket(files: List[UploadFile] = File(...)):
 
 
 @app.delete("/api/tickets/{ticket_id}")
-async def delete_ticket(ticket_id: str):
-    """Delete an uploaded ticket."""
-    ticket_dir = UPLOAD_DIR / ticket_id
+async def delete_ticket(request: Request, ticket_id: str):
+    """Delete a single ticket."""
+    ip = get_ip(request)
+    touch_ip(ip)
+    ticket_dir = ip_dir(ip) / ticket_id
     if not ticket_dir.exists():
         raise HTTPException(404, "Ticket not found")
     shutil.rmtree(ticket_dir)
     return {"deleted": ticket_id}
 
 
+@app.delete("/api/tickets")
+async def delete_all_tickets(request: Request):
+    """Delete all tickets for this IP."""
+    ip = get_ip(request)
+    touch_ip(ip)
+    base = ip_dir(ip)
+    count = 0
+    if base.exists():
+        for d in base.iterdir():
+            if d.is_dir():
+                shutil.rmtree(d)
+                count += 1
+    return {"deleted": count}
+
+
 @app.get("/api/tickets")
-async def list_tickets():
-    """List all uploaded ticket IDs."""
-    if not UPLOAD_DIR.exists():
+async def list_tickets(request: Request):
+    """List all uploaded ticket IDs for this IP."""
+    ip = get_ip(request)
+    touch_ip(ip)
+    base = ip_dir(ip)
+    if not base.exists():
         return []
     tickets = sorted(
-        [d.name for d in UPLOAD_DIR.iterdir() if d.is_dir()],
+        [d.name for d in base.iterdir() if d.is_dir()],
         reverse=True,
     )
     results = []
     for tid in tickets:
-        config_path = UPLOAD_DIR / tid / "config.json"
+        config_path = base / tid / "config.json"
         summary = {"ticketId": tid}
         if config_path.exists():
             try:
@@ -88,9 +165,11 @@ async def list_tickets():
 
 
 @app.get("/api/tickets/{ticket_id}")
-async def get_ticket(ticket_id: str):
+async def get_ticket(request: Request, ticket_id: str):
     """Get full ticket config."""
-    config_path = UPLOAD_DIR / ticket_id / "config.json"
+    ip = get_ip(request)
+    touch_ip(ip)
+    config_path = ip_dir(ip) / ticket_id / "config.json"
     if not config_path.exists():
         raise HTTPException(404, "Ticket not found")
     with open(config_path, "r", encoding="utf-8") as f:
@@ -109,7 +188,6 @@ async def get_ticket(ticket_id: str):
         "formId": data.get("formId"),
     }
 
-    # Extract table data from top-level integrator
     integrator = data.get("integrator", {})
     tables = []
     for tbl in integrator.get("tableList", []):
@@ -135,7 +213,6 @@ async def get_ticket(ticket_id: str):
         })
     summary["tables"] = tables
 
-    # Extract regList page info (lightweight)
     pages = []
     for i, reg in enumerate(data.get("regList", [])):
         page_info = {
@@ -156,9 +233,11 @@ async def get_ticket(ticket_id: str):
 
 
 @app.get("/api/tickets/{ticket_id}/pages/{page_index}/areas")
-async def get_page_areas(ticket_id: str, page_index: int):
+async def get_page_areas(request: Request, ticket_id: str, page_index: int):
     """Get analyzer areaList for a specific page."""
-    config_path = UPLOAD_DIR / ticket_id / "config.json"
+    ip = get_ip(request)
+    touch_ip(ip)
+    config_path = ip_dir(ip) / ticket_id / "config.json"
     if not config_path.exists():
         raise HTTPException(404, "Ticket not found")
     with open(config_path, "r", encoding="utf-8") as f:
@@ -176,9 +255,11 @@ async def get_page_areas(ticket_id: str, page_index: int):
 
 
 @app.get("/tickets/{ticket_id}/images/{filename}")
-async def get_image(ticket_id: str, filename: str):
+async def get_image(request: Request, ticket_id: str, filename: str):
     """Serve ticket images."""
-    file_path = UPLOAD_DIR / ticket_id / filename
+    ip = get_ip(request)
+    touch_ip(ip)
+    file_path = ip_dir(ip) / ticket_id / filename
     if not file_path.exists():
         raise HTTPException(404, "Image not found")
     return FileResponse(file_path, media_type="image/jpeg")
