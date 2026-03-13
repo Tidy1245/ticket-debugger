@@ -562,6 +562,31 @@
       padding: 12px;
       border-bottom: 1px solid var(--border);
     }
+    .upload-mode-toggle {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+      background: var(--bg-input);
+      border-radius: 6px;
+      padding: 3px;
+    }
+    .upload-mode {
+      flex: 1;
+      padding: 5px 0;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-family: 'Fira Code', monospace;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .upload-mode.active {
+      background: var(--accent-blue-dim);
+      color: white;
+    }
+    .upload-mode:hover:not(.active) { color: var(--text-secondary); }
     .upload-drop {
       border: 2px dashed var(--border);
       border-radius: var(--radius);
@@ -792,12 +817,16 @@
         </div>
       </div>
       <div class="upload-section">
+        <div class="upload-mode-toggle">
+          <button class="upload-mode active" id="modeSingle" onclick="setUploadMode('single')">Ticket</button>
+          <button class="upload-mode" id="modeBatch" onclick="setUploadMode('batch')">Batch</button>
+        </div>
         <div class="upload-drop" id="uploadDrop">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
           </svg>
-          <div class="upload-text">Upload Ticket Folder</div>
-          <div class="upload-hint">Click or drag folder here</div>
+          <div class="upload-text" id="uploadText">Upload Ticket Folder</div>
+          <div class="upload-hint" id="uploadHint">Click or drag ticket folder here</div>
           <input type="file" id="folderInput" webkitdirectory directory multiple>
           <div class="upload-progress" id="uploadProgress">
             <div class="upload-progress-bar"><div class="upload-progress-fill" id="uploadProgressFill"></div></div>
@@ -882,6 +911,9 @@
               </div>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
                 <input type="checkbox" id="showAreas" checked> Show OCR Areas
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                <input type="checkbox" id="showCoords"> Show Coords
               </label>
             </div>
             <div class="page-nav" id="pageNav"></div>
@@ -1177,6 +1209,8 @@
         scaleY = img.naturalHeight / processorImgSize.h;
       }
 
+      const showCoords = document.getElementById('showCoords').checked;
+
       areas.forEach((area, i) => {
         const div = document.createElement('div');
         div.className = 'area-overlay' + (area.isFormatError ? ' format-error' : '');
@@ -1185,6 +1219,12 @@
         div.style.width = (area.w * scaleX * zoomLevel) + 'px';
         div.style.height = (area.h * scaleY * zoomLevel) + 'px';
         div.dataset.index = i;
+        if (showCoords) {
+          const label = document.createElement('span');
+          label.style.cssText = 'position:absolute;top:-16px;left:0;font-size:10px;font-family:Fira Code,monospace;color:var(--accent-amber);white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 6px #000;';
+          label.textContent = `(${area.x},${area.y},${area.w},${area.h})`;
+          div.appendChild(label);
+        }
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
         container.appendChild(div);
@@ -1225,6 +1265,7 @@
 
     // Image controls
     document.getElementById('showAreas').addEventListener('change', () => renderAreaOverlays());
+    document.getElementById('showCoords').addEventListener('change', () => renderAreaOverlays());
 
     const viewBtns = ['btnFit', 'btnFitPage'];
     function setViewMode(mode, activeId) {
@@ -1371,11 +1412,22 @@
     }
 
     // --- Upload ---
+    const TICKET_NAME_RE = /^\d{12}[A-Za-z0-9]{4}$/;
+    let uploadMode = 'single'; // 'single' or 'batch'
+
     const uploadDrop = document.getElementById('uploadDrop');
     const folderInput = document.getElementById('folderInput');
     const uploadProgress = document.getElementById('uploadProgress');
     const uploadProgressFill = document.getElementById('uploadProgressFill');
     const uploadProgressText = document.getElementById('uploadProgressText');
+
+    function setUploadMode(mode) {
+      uploadMode = mode;
+      document.getElementById('modeSingle').classList.toggle('active', mode === 'single');
+      document.getElementById('modeBatch').classList.toggle('active', mode === 'batch');
+      document.getElementById('uploadText').textContent = mode === 'single' ? 'Upload Ticket Folder' : 'Upload Batch Folder';
+      document.getElementById('uploadHint').textContent = mode === 'single' ? 'Click or drag ticket folder here' : 'Click or drag batch folder (contains multiple tickets)';
+    }
 
     uploadDrop.addEventListener('click', () => folderInput.click());
 
@@ -1389,20 +1441,19 @@
       uploadDrop.classList.remove('dragover');
       const items = e.dataTransfer.items;
       if (items && items.length) {
-        // For folder drops, use webkitGetAsEntry
         const entries = [];
         for (let i = 0; i < items.length; i++) {
           const entry = items[i].webkitGetAsEntry();
           if (entry) entries.push(entry);
         }
         if (entries.length) {
-          collectFiles(entries).then(uploadFiles);
+          collectFiles(entries).then(files => processUpload(files));
         }
       }
     });
 
     folderInput.addEventListener('change', () => {
-      if (folderInput.files.length) uploadFiles(folderInput.files);
+      if (folderInput.files.length) processUpload(folderInput.files);
     });
 
     async function collectFiles(entries) {
@@ -1414,8 +1465,14 @@
           files.push(file);
         } else if (entry.isDirectory) {
           const reader = entry.createReader();
-          const subEntries = await new Promise(r => reader.readEntries(r));
-          for (const sub of subEntries) {
+          let allEntries = [];
+          // readEntries may return partial results, call until empty
+          let batch;
+          do {
+            batch = await new Promise(r => reader.readEntries(r));
+            allEntries = allEntries.concat(batch);
+          } while (batch.length > 0);
+          for (const sub of allEntries) {
             await readEntry(sub, path + entry.name + '/');
           }
         }
@@ -1424,8 +1481,95 @@
       return files;
     }
 
-    async function uploadFiles(fileList) {
+    function processUpload(fileList) {
       const files = Array.from(fileList);
+      if (!files.length) return;
+
+      if (uploadMode === 'single') {
+        // Validate ticket name (first path segment)
+        const firstPath = (files[0].webkitRelativePath || files[0].name).replace(/\\/g, '/');
+        const ticketName = firstPath.split('/')[0];
+        if (!TICKET_NAME_RE.test(ticketName)) {
+          alert(`Invalid ticket name: "${ticketName}"\nMust be 12 digits + 4 alphanumeric characters (e.g. 260302145013Xjm6)`);
+          return;
+        }
+        uploadFiles(files);
+      } else {
+        // Batch mode: group files by top-level ticket folder
+        // Path structure: batchDir/ticketDir/...
+        const groups = {};
+        for (const f of files) {
+          const rel = (f.webkitRelativePath || f.name).replace(/\\/g, '/');
+          const parts = rel.split('/');
+          if (parts.length < 3) continue; // skip files not inside a ticket subfolder
+          const ticketName = parts[1]; // batchDir/ticketDir/...
+          if (!groups[ticketName]) groups[ticketName] = [];
+          groups[ticketName].push(f);
+        }
+
+        const ticketNames = Object.keys(groups);
+        if (!ticketNames.length) {
+          alert('No ticket subfolders found in the batch folder.');
+          return;
+        }
+
+        // Validate all ticket names
+        const invalid = ticketNames.filter(n => !TICKET_NAME_RE.test(n));
+        if (invalid.length) {
+          alert(`Invalid ticket name(s):\n${invalid.join('\n')}\n\nMust be 12 digits + 4 alphanumeric characters (e.g. 260302145013Xjm6)`);
+          return;
+        }
+
+        // Upload each ticket sequentially
+        uploadBatch(groups, ticketNames);
+      }
+    }
+
+    async function uploadBatch(groups, ticketNames) {
+      uploadProgress.style.display = 'block';
+      let done = 0;
+      for (const name of ticketNames) {
+        const files = groups[name];
+        // Rewrite paths: strip batch dir prefix so ticketDir becomes root
+        const remapped = files.map(f => {
+          const rel = (f.webkitRelativePath || f.name).replace(/\\/g, '/');
+          const parts = rel.split('/');
+          const newPath = parts.slice(1).join('/'); // remove batchDir
+          return { file: f, path: newPath };
+        });
+
+        uploadProgressFill.style.width = Math.round(done / ticketNames.length * 100) + '%';
+        uploadProgressText.textContent = `Uploading ${name} (${done + 1}/${ticketNames.length})...`;
+
+        const formData = new FormData();
+        for (const { file, path } of remapped) {
+          formData.append('files', file, path);
+        }
+
+        try {
+          await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(xhr.statusText));
+            xhr.onerror = () => reject(new Error('Upload failed'));
+            xhr.open('POST', '/api/upload');
+            xhr.send(formData);
+          });
+        } catch (err) {
+          uploadProgressText.textContent = `Failed: ${name} - ${err.message}`;
+          return;
+        }
+        done++;
+      }
+
+      uploadProgressFill.style.width = '100%';
+      uploadProgressText.textContent = `Batch complete! ${done} tickets uploaded.`;
+      setTimeout(() => { uploadProgress.style.display = 'none'; }, 2000);
+      folderInput.value = '';
+      const tickets = await fetchJSON('/api/tickets');
+      renderTicketList(tickets);
+    }
+
+    async function uploadFiles(files) {
       if (!files.length) return;
 
       uploadProgress.style.display = 'block';
@@ -1461,7 +1605,6 @@
         uploadProgressText.textContent = 'Upload complete!';
         setTimeout(() => { uploadProgress.style.display = 'none'; }, 2000);
 
-        // Refresh ticket list
         folderInput.value = '';
         const tickets = await fetchJSON('/api/tickets');
         renderTicketList(tickets);
