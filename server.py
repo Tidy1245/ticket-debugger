@@ -250,6 +250,10 @@ async def get_ticket(request: Request, ticket_id: str):
                         "confidence": cell.get("confidence", []),
                         "isFormatError": cell.get("isFormatError", False),
                         "regNdx": cell.get("regNdx"),
+                        "x": cell.get("x", 0),
+                        "y": cell.get("y", 0),
+                        "w": cell.get("w", 0),
+                        "h": cell.get("h", 0),
                     }
                 rows.append(row)
             tables.append({

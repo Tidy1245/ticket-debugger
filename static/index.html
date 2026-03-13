@@ -382,6 +382,52 @@
       box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
       z-index: 11;
     }
+    .cell-highlight {
+      position: absolute;
+      border: 2.5px solid #f59e0b;
+      background: rgba(245, 158, 11, 0.18);
+      z-index: 20;
+      pointer-events: none;
+      border-radius: 2px;
+      animation: cell-pulse 1.5s ease-in-out 3;
+    }
+    .cell-highlight-label {
+      position: absolute;
+      top: -22px;
+      left: 0;
+      font-size: 11px;
+      font-family: 'Fira Code', monospace;
+      color: #fff;
+      background: rgba(245, 158, 11, 0.9);
+      padding: 2px 8px;
+      border-radius: 3px;
+      white-space: nowrap;
+      pointer-events: none;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    @keyframes cell-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+      50% { box-shadow: 0 0 12px 4px rgba(245, 158, 11, 0.4); }
+    }
+
+    /* Locatable table cell */
+    td.locatable { cursor: pointer; position: relative; }
+    td.locatable:hover { background: rgba(245, 158, 11, 0.08); }
+    td.locatable::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-amber);
+      opacity: 0.4;
+    }
+    td.locatable:hover::after { opacity: 0.8; }
+    td.cell-active { background: rgba(245, 158, 11, 0.15) !important; }
     .area-tooltip {
       position: fixed;
       background: var(--bg-card);
@@ -1091,6 +1137,7 @@
       ocrSearchResults = [];
       ocrSearchCurrent = -1;
       tableSearchQuery = '';
+      cellHighlightData = null;
       document.getElementById('ocrSearchInput').value = '';
       document.getElementById('ocrSearchInfo').textContent = '';
       document.getElementById('tableSearchInput').value = '';
@@ -1200,6 +1247,7 @@
     function switchPage(index) {
       const pages = ticketData.pages || [];
       if (index < 0 || index >= pages.length) return;
+      cellHighlightData = null;
       currentPageIndex = index;
       renderPageNav();
       loadPageImage();
@@ -1241,6 +1289,7 @@
       img.style.transformOrigin = '0 0';
 
       renderAreaOverlays();
+      renderCellHighlight();
       updateZoomInfo();
     }
 
@@ -1609,7 +1658,7 @@
                 <tbody>
           `;
 
-          rows.forEach(row => {
+          rows.forEach((row, ri) => {
             html += '<tr>';
             headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
               const cell = row[h.key] || {};
@@ -1619,6 +1668,9 @@
               const isError = cell.isFormatError;
 
               let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
+              // Check if cell has valid location (not (0,0,1,1) and has regNdx)
+              const hasLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
+              if (hasLoc) cellClass += ' locatable';
               let content;
               if (isModified) {
                 content = `<div class="cell-diff"><span class="original">${escHtml(text)}</span><span class="modified-val">${escHtml(textModify)}</span></div>`;
@@ -1626,7 +1678,8 @@
                 content = escHtml(textModify || text);
               }
 
-              html += `<td class="${cellClass}">${content}</td>`;
+              const locAttr = hasLoc ? ` data-rx="${cell.x}" data-ry="${cell.y}" data-rw="${cell.w}" data-rh="${cell.h}" data-rp="${cell.regNdx}" data-rk="${escHtml(h.name || h.text || h.key)}" data-rt="${escHtml(textModify || text)}"` : '';
+              html += `<td class="${cellClass}"${locAttr}>${content}</td>`;
             });
             html += '</tr>';
           });
@@ -1664,6 +1717,90 @@
           renderTable();
         });
       });
+
+      // Attach cell locate click listeners
+      document.querySelectorAll('td.locatable').forEach(el => {
+        el.addEventListener('click', () => {
+          // Clear previous active
+          document.querySelectorAll('td.cell-active').forEach(c => c.classList.remove('cell-active'));
+          el.classList.add('cell-active');
+          locateCell(
+            parseInt(el.dataset.rx), parseInt(el.dataset.ry),
+            parseInt(el.dataset.rw), parseInt(el.dataset.rh),
+            parseInt(el.dataset.rp), el.dataset.rk, el.dataset.rt
+          );
+        });
+      });
+    }
+
+    // --- Cell locate on image ---
+    let cellHighlightData = null; // {x, y, w, h, key, text}
+
+    async function locateCell(x, y, w, h, pageIdx, key, text) {
+      cellHighlightData = { x, y, w, h, key, text };
+
+      // Switch to Images tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      const imgTab = document.querySelector('.tab[data-tab="images"]');
+      imgTab.classList.add('active');
+      document.getElementById('panelImages').classList.add('active');
+
+      // Navigate to the correct page
+      if (pageIdx !== currentPageIndex) {
+        currentPageIndex = pageIdx;
+        renderPageNav();
+        await loadPageImage();
+      } else {
+        renderAreaOverlays();
+      }
+
+      // Scroll to highlight after render
+      requestAnimationFrame(() => scrollToCellHighlight());
+    }
+
+    function renderCellHighlight() {
+      const container = document.getElementById('imageContainer');
+      container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
+      if (!cellHighlightData) return;
+
+      const img = document.getElementById('pageImg');
+      if (!img || !img.naturalWidth) return;
+      const vw = imageViewport.clientWidth;
+      const vh = imageViewport.clientHeight;
+      const scaledW = img.naturalWidth * zoomLevel;
+      const scaledH = img.naturalHeight * zoomLevel;
+      const padX = Math.max(0, (vw - scaledW) / 2);
+      const padY = Math.max(0, (vh - scaledH) / 2);
+
+      let scaleX = 1, scaleY = 1;
+      if (processorImgSize) {
+        scaleX = img.naturalWidth / processorImgSize.w;
+        scaleY = img.naturalHeight / processorImgSize.h;
+      }
+
+      const { x, y, w, h, key, text } = cellHighlightData;
+      const div = document.createElement('div');
+      div.className = 'cell-highlight';
+      div.style.left = (padX + x * scaleX * zoomLevel) + 'px';
+      div.style.top = (padY + y * scaleY * zoomLevel) + 'px';
+      div.style.width = (w * scaleX * zoomLevel) + 'px';
+      div.style.height = (h * scaleY * zoomLevel) + 'px';
+
+      const label = document.createElement('span');
+      label.className = 'cell-highlight-label';
+      label.textContent = `${key}: ${text}`;
+      div.appendChild(label);
+
+      container.appendChild(div);
+    }
+
+    function scrollToCellHighlight() {
+      const hl = document.querySelector('.cell-highlight');
+      if (!hl) return;
+      const left = parseInt(hl.style.left) - imageViewport.clientWidth / 2 + parseInt(hl.style.width) / 2;
+      const top = parseInt(hl.style.top) - imageViewport.clientHeight / 2 + parseInt(hl.style.height) / 2;
+      imageViewport.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: 'smooth' });
     }
 
     function escHtml(s) {
