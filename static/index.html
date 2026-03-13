@@ -1248,12 +1248,21 @@
     let processorImgSize = null;
 
     async function loadPageImage() {
-      const page = ticketData.pages[currentPageIndex];
+      const pages = ticketData.pages || [];
+      const container = document.getElementById('imageContainer');
+
+      if (!pages.length) {
+        container.innerHTML = '<p style="padding:40px;color:var(--text-muted);text-align:center;">No images in this ticket</p>';
+        document.getElementById('pageNav').innerHTML = '';
+        return;
+      }
+
+      const page = pages[currentPageIndex];
       if (!page) return;
-      const filename = page.oriInputList[0];
+      const filename = page.oriInputList?.[0];
 
       if (!filename) {
-        document.getElementById('imageContainer').innerHTML = '<p style="padding:40px;color:var(--text-muted);">No image available</p>';
+        container.innerHTML = '<p style="padding:40px;color:var(--text-muted);text-align:center;">No image available for this page</p>';
         return;
       }
 
@@ -1756,6 +1765,16 @@
       if (!files.length) return;
 
       if (uploadMode === 'single') {
+        // Check config.json exists
+        const hasConfig = files.some(f => {
+          const rel = (f.webkitRelativePath || f.name).replace(/\\/g, '/');
+          const parts = rel.split('/');
+          return parts.length === 2 && parts[1] === 'config.json';
+        });
+        if (!hasConfig) {
+          alert('Upload failed: config.json not found in the ticket folder.');
+          return;
+        }
         uploadFiles(files);
       } else {
         // Batch mode: group files by top-level ticket folder
@@ -1776,17 +1795,26 @@
           return;
         }
 
-        // Filter to valid ticket names, warn about skipped
-        const valid = allNames.filter(n => TICKET_NAME_RE.test(n));
-        const invalid = allNames.filter(n => !TICKET_NAME_RE.test(n));
+        // Filter: valid name + has config.json
+        const skipped = [];
+        const valid = allNames.filter(n => {
+          if (!TICKET_NAME_RE.test(n)) { skipped.push(`${n} (invalid name)`); return false; }
+          const hasConfig = groups[n].some(f => {
+            const rel = (f.webkitRelativePath || f.name).replace(/\\/g, '/');
+            const parts = rel.split('/');
+            return parts[parts.length - 1] === 'config.json' && parts.length === 3;
+          });
+          if (!hasConfig) { skipped.push(`${n} (no config.json)`); return false; }
+          return true;
+        });
 
         if (!valid.length) {
-          alert(`No valid tickets found.\nSkipped: ${invalid.join(', ')}\n\nTicket name must be 12 digits + 4 alphanumeric characters.`);
+          alert(`No valid tickets found.\nSkipped:\n${skipped.join('\n')}`);
           return;
         }
 
-        if (invalid.length) {
-          alert(`Skipping ${invalid.length} invalid name(s):\n${invalid.join(', ')}\n\nUploading ${valid.length} valid ticket(s).`);
+        if (skipped.length) {
+          alert(`Skipping ${skipped.length} ticket(s):\n${skipped.join('\n')}\n\nUploading ${valid.length} valid ticket(s).`);
         }
 
         // Only upload valid tickets
