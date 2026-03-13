@@ -330,20 +330,16 @@
       position: relative;
       flex: 1;
       min-height: 0;
+      cursor: grab;
     }
+    .image-viewport.dragging { cursor: grabbing; }
     .image-viewport img {
       display: block;
-      max-width: 100%;
-      height: auto;
       transform-origin: 0 0;
     }
-    .image-viewport.fit-width img { width: 100%; max-width: none; }
-    .image-viewport.fit-height img { max-width: none; height: 100%; width: auto; }
-    .image-viewport { cursor: grab; }
-    .image-viewport.dragging { cursor: grabbing; }
 
     /* Overlay areas on image */
-    .image-container { position: relative; display: inline-block; }
+    .image-container { position: relative; }
     .area-overlay {
       position: absolute;
       border: 1.5px solid rgba(59, 130, 246, 0.6);
@@ -437,24 +433,32 @@
     .cell-diff .modified-val {
       color: var(--accent-amber);
     }
-    .conf-bar {
-      display: inline-block;
-      width: 40px;
-      height: 4px;
-      background: var(--border);
-      border-radius: 2px;
-      overflow: hidden;
-      vertical-align: middle;
-      margin-left: 6px;
+    /* Column toggle */
+    .col-toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+      flex-shrink: 0;
     }
-    .conf-bar-fill {
-      height: 100%;
-      border-radius: 2px;
-      transition: width var(--transition);
+    .col-toggle {
+      font-family: 'Fira Code', monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition);
+      user-select: none;
     }
-    .conf-high { background: var(--accent-green); }
-    .conf-mid { background: var(--accent-amber); }
-    .conf-low { background: var(--accent-red); }
+    .col-toggle:hover { border-color: var(--accent-blue-dim); }
+    .col-toggle.active {
+      background: var(--accent-blue-dim);
+      border-color: var(--accent-blue);
+      color: white;
+    }
 
     /* Page navigation for images */
     .page-nav {
@@ -668,7 +672,7 @@
               </label>
             </div>
             <div class="page-nav" id="pageNav"></div>
-            <div class="image-viewport fit-width" id="imageViewport">
+            <div class="image-viewport" id="imageViewport">
               <div class="image-container" id="imageContainer"></div>
             </div>
           </div>
@@ -801,6 +805,8 @@
 
     // --- Images ---
     let zoomLevel = 1;
+    let currentViewMode = 'fit-width'; // 'fit-width' or 'fit-height'
+    const imageViewport = document.getElementById('imageViewport');
 
     function renderPageNav() {
       const pages = ticketData.pages || [];
@@ -826,7 +832,6 @@
       const pages = ticketData.pages || [];
       if (index < 0 || index >= pages.length) return;
       currentPageIndex = index;
-      zoomLevel = 1;
       renderPageNav();
       loadPageImage();
     }
@@ -834,6 +839,40 @@
     function updateZoomInfo() {
       const el = document.getElementById('zoomInfo');
       if (el) el.textContent = `${Math.round(zoomLevel * 100)}%`;
+    }
+
+    function calcFitZoom(mode) {
+      const img = document.getElementById('pageImg');
+      if (!img || !img.naturalWidth) return 1;
+      const vw = imageViewport.clientWidth;
+      const vh = imageViewport.clientHeight;
+      if (mode === 'fit-width') return vw / img.naturalWidth;
+      if (mode === 'fit-height') return vh / img.naturalHeight;
+      return 1;
+    }
+
+    function applyZoom() {
+      const img = document.getElementById('pageImg');
+      if (!img || !img.naturalWidth) return;
+      const container = document.getElementById('imageContainer');
+      const vw = imageViewport.clientWidth;
+      const vh = imageViewport.clientHeight;
+
+      const scaledW = img.naturalWidth * zoomLevel;
+      const scaledH = img.naturalHeight * zoomLevel;
+
+      // Set container size to scaled image size, with min = viewport for centering
+      container.style.width = Math.max(scaledW, vw) + 'px';
+      container.style.height = Math.max(scaledH, vh) + 'px';
+
+      // Center image via padding
+      const padX = Math.max(0, (vw - scaledW) / 2);
+      const padY = Math.max(0, (vh - scaledH) / 2);
+      img.style.transform = `translate(${padX}px, ${padY}px) scale(${zoomLevel})`;
+      img.style.transformOrigin = '0 0';
+
+      renderAreaOverlays();
+      updateZoomInfo();
     }
 
     async function loadPageImage() {
@@ -856,38 +895,40 @@
         } catch { pageAreas[currentPageIndex] = { areaList: [] }; }
       }
 
-      container.innerHTML = `<img src="${imgUrl}" id="pageImg" onload="onImageLoad()" crossorigin="anonymous">`;
-    }
-
-    function onImageLoad() {
-      const showAreas = document.getElementById('showAreas').checked;
-      if (showAreas) renderAreaOverlays();
+      container.innerHTML = `<img src="${imgUrl}" id="pageImg" crossorigin="anonymous">`;
+      const img = document.getElementById('pageImg');
+      img.onload = () => {
+        zoomLevel = calcFitZoom(currentViewMode);
+        applyZoom();
+      };
     }
 
     function renderAreaOverlays() {
       const img = document.getElementById('pageImg');
-      if (!img) return;
+      if (!img || !img.naturalWidth) return;
       const container = document.getElementById('imageContainer');
+      const vw = imageViewport.clientWidth;
+      const vh = imageViewport.clientHeight;
 
-      // Remove old overlays
       container.querySelectorAll('.area-overlay').forEach(el => el.remove());
+
+      if (!document.getElementById('showAreas').checked) return;
 
       const areas = pageAreas[currentPageIndex]?.areaList || [];
       if (!areas.length) return;
 
-      // Account for CSS display size and zoom transform
-      const displayW = img.clientWidth;
-      const displayH = img.clientHeight;
-      const scaleX = (displayW / img.naturalWidth) * zoomLevel;
-      const scaleY = (displayH / img.naturalHeight) * zoomLevel;
+      const scaledW = img.naturalWidth * zoomLevel;
+      const scaledH = img.naturalHeight * zoomLevel;
+      const padX = Math.max(0, (vw - scaledW) / 2);
+      const padY = Math.max(0, (vh - scaledH) / 2);
 
       areas.forEach((area, i) => {
         const div = document.createElement('div');
         div.className = 'area-overlay' + (area.isFormatError ? ' format-error' : '');
-        div.style.left = (area.x * scaleX) + 'px';
-        div.style.top = (area.y * scaleY) + 'px';
-        div.style.width = (area.w * scaleX) + 'px';
-        div.style.height = (area.h * scaleY) + 'px';
+        div.style.left = (padX + area.x * zoomLevel) + 'px';
+        div.style.top = (padY + area.y * zoomLevel) + 'px';
+        div.style.width = (area.w * zoomLevel) + 'px';
+        div.style.height = (area.h * zoomLevel) + 'px';
         div.dataset.index = i;
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
@@ -918,44 +959,28 @@
     }
 
     // Image controls
-    document.getElementById('showAreas').addEventListener('change', () => {
-      const container = document.getElementById('imageContainer');
-      if (document.getElementById('showAreas').checked) {
-        renderAreaOverlays();
-      } else {
-        container.querySelectorAll('.area-overlay').forEach(el => el.remove());
-      }
-    });
+    document.getElementById('showAreas').addEventListener('change', () => renderAreaOverlays());
 
-    let currentViewMode = 'fit-width';
     const viewBtns = ['btnFit', 'btnFitPage'];
     function setViewMode(mode, activeId) {
       currentViewMode = mode;
-      zoomLevel = 1;
-      const vp = document.getElementById('imageViewport');
-      vp.className = 'image-viewport ' + mode;
+      zoomLevel = calcFitZoom(mode);
       viewBtns.forEach(id => document.getElementById(id).classList.toggle('active', id === activeId));
-      const img = document.getElementById('pageImg');
-      if (img) img.style.transform = '';
-      setTimeout(() => { renderAreaOverlays(); updateZoomInfo(); }, 50);
+      applyZoom();
+      // Reset scroll to center
+      imageViewport.scrollLeft = 0;
+      imageViewport.scrollTop = 0;
     }
     document.getElementById('btnFit').addEventListener('click', () => setViewMode('fit-width', 'btnFit'));
     document.getElementById('btnFitPage').addEventListener('click', () => setViewMode('fit-height', 'btnFitPage'));
 
     // Scroll wheel zoom
-    const imageViewport = document.getElementById('imageViewport');
     imageViewport.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      zoomLevel = Math.max(0.1, Math.min(5, zoomLevel + delta));
-
-      const img = document.getElementById('pageImg');
-      if (!img) return;
-
-      img.style.transform = `scale(${zoomLevel})`;
-      img.style.transformOrigin = '0 0';
-      updateZoomInfo();
-      setTimeout(renderAreaOverlays, 50);
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      zoomLevel = Math.max(0.05, Math.min(10, zoomLevel * factor));
+      viewBtns.forEach(id => document.getElementById(id).classList.remove('active'));
+      applyZoom();
     }, { passive: false });
 
     // Drag to pan
@@ -975,10 +1000,8 @@
 
     window.addEventListener('mousemove', (e) => {
       if (!isDragging) return;
-      const dx = e.clientX - dragStartX;
-      const dy = e.clientY - dragStartY;
-      imageViewport.scrollLeft = scrollStartX - dx;
-      imageViewport.scrollTop = scrollStartY - dy;
+      imageViewport.scrollLeft = scrollStartX - (e.clientX - dragStartX);
+      imageViewport.scrollTop = scrollStartY - (e.clientY - dragStartY);
     });
 
     window.addEventListener('mouseup', () => {
@@ -988,6 +1011,8 @@
     });
 
     // --- Table ---
+    let visibleColumns = null; // null = all visible
+
     function renderTable() {
       const tables = ticketData.tables || [];
       if (!tables.length) {
@@ -999,26 +1024,31 @@
       const headers = t.headers || [];
       const rows = t.rows || [];
 
+      // Init visible columns (all on first load)
+      if (visibleColumns === null) {
+        visibleColumns = new Set(headers.map(h => h.key));
+      }
+
+      // Column toggles
       let html = `
         <div class="section-header" style="flex-shrink:0;">${t.name || 'Table'} <span class="count">${rows.length} rows</span></div>
+        <div class="col-toggles">
+          ${headers.map(h => `<span class="col-toggle ${visibleColumns.has(h.key) ? 'active' : ''}" data-col="${h.key}">${h.name || h.key}</span>`).join('')}
+        </div>
         <div class="table-container" style="flex:1;min-height:0;overflow:auto;">
           <table>
-            <thead><tr>${headers.map(h => `<th title="${h.key}">${h.name || h.key}</th>`).join('')}</tr></thead>
+            <thead><tr>${headers.filter(h => visibleColumns.has(h.key)).map(h => `<th title="${h.key}">${h.name || h.key}</th>`).join('')}</tr></thead>
             <tbody>
       `;
 
       rows.forEach(row => {
         html += '<tr>';
-        headers.forEach(h => {
+        headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
           const cell = row[h.key] || {};
           const text = cell.text || '';
           const textModify = cell.textModify || '';
           const isModified = text !== textModify && textModify;
           const isError = cell.isFormatError;
-          const avgConf = cell.confidence?.length
-            ? cell.confidence.reduce((a, b) => a + b, 0) / cell.confidence.length
-            : 1;
-          const confClass = avgConf >= 0.95 ? 'conf-high' : avgConf >= 0.8 ? 'conf-mid' : 'conf-low';
 
           let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
           let content;
@@ -1028,18 +1058,26 @@
             content = escHtml(textModify || text);
           }
 
-          // Confidence bar
-          const confBar = cell.confidence?.length
-            ? `<div class="conf-bar"><div class="conf-bar-fill ${confClass}" style="width:${avgConf * 100}%"></div></div>`
-            : '';
-
-          html += `<td class="${cellClass}">${content}${confBar}</td>`;
+          html += `<td class="${cellClass}">${content}</td>`;
         });
         html += '</tr>';
       });
 
       html += '</tbody></table></div>';
       document.getElementById('tableContent').innerHTML = html;
+
+      // Attach toggle listeners
+      document.querySelectorAll('.col-toggle').forEach(el => {
+        el.addEventListener('click', () => {
+          const key = el.dataset.col;
+          if (visibleColumns.has(key)) {
+            if (visibleColumns.size > 1) visibleColumns.delete(key);
+          } else {
+            visibleColumns.add(key);
+          }
+          renderTable();
+        });
+      });
     }
 
     function escHtml(s) {
