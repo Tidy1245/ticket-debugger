@@ -149,6 +149,7 @@
       padding: 12px 24px 0;
       border-bottom: 1px solid var(--border);
       background: var(--bg-secondary);
+      flex-shrink: 0;
     }
     .tab {
       padding: 10px 20px;
@@ -644,7 +645,7 @@
         </svg>
         <p>Select a ticket to inspect</p>
       </div>
-      <div id="ticketView" style="display:none;">
+      <div id="ticketView" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
         <div class="tab-bar">
           <div class="tab active" data-tab="overview">Overview</div>
           <div class="tab" data-tab="images">Images</div>
@@ -746,7 +747,7 @@
       });
 
       document.getElementById('emptyState').style.display = 'none';
-      document.getElementById('ticketView').style.display = '';
+      document.getElementById('ticketView').style.display = 'flex';
 
       // Show loading
       document.getElementById('infoGrid').innerHTML = '<div class="loading"><div class="spinner"></div>Loading...</div>';
