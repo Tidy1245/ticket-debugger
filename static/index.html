@@ -438,6 +438,37 @@
     .cell-diff .modified-val {
       color: var(--accent-amber);
     }
+    /* Area list (key-value fields) */
+    .area-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-shrink: 0;
+    }
+    .area-item {
+      display: flex;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .area-item .area-label {
+      font-family: 'Fira Code', monospace;
+      font-size: 11px;
+      color: var(--accent-blue);
+      white-space: nowrap;
+      min-width: 80px;
+      flex-shrink: 0;
+    }
+    .area-item .area-value {
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+
     /* Column toggle */
     .col-toggles {
       display: flex;
@@ -764,6 +795,7 @@
       currentTicket = id;
       currentPageIndex = 0;
       pageAreas = {};
+      visibleColumns = null;
 
       // Update sidebar active state
       document.querySelectorAll('.ticket-item').forEach(el => {
@@ -1053,56 +1085,75 @@
     let visibleColumns = null; // null = all visible
 
     function renderTable() {
+      const areas = ticketData.areas || [];
       const tables = ticketData.tables || [];
-      if (!tables.length) {
+
+      if (!areas.length && !tables.length) {
         document.getElementById('tableContent').innerHTML = '<p style="color:var(--text-muted);">No table data available</p>';
         return;
       }
 
-      const t = tables[0];
-      const headers = t.headers || [];
-      const rows = t.rows || [];
+      let html = '';
 
-      // Init visible columns (all on first load)
-      if (visibleColumns === null) {
-        visibleColumns = new Set(headers.map(h => h.key));
+      // Render areaList as key-value grid
+      if (areas.length) {
+        html += `<div class="section-header" style="flex-shrink:0;">Fields <span class="count">${areas.length}</span></div>`;
+        html += '<div class="area-grid">';
+        areas.forEach(a => {
+          const value = a.text || a.textOCR || '';
+          const label = a.name || a.key;
+          html += `<div class="area-item"><span class="area-label">${escHtml(label)}</span><span class="area-value">${escHtml(value)}</span></div>`;
+        });
+        html += '</div>';
       }
 
-      // Column toggles
-      let html = `
-        <div class="section-header" style="flex-shrink:0;">${t.name || 'Table'} <span class="count">${rows.length} rows</span></div>
-        <div class="col-toggles">
-          ${headers.map(h => `<span class="col-toggle ${visibleColumns.has(h.key) ? 'active' : ''}" data-col="${h.key}">${h.name || h.key}</span>`).join('')}
-        </div>
-        <div class="table-container" style="flex:1;min-height:0;overflow:auto;">
-          <table>
-            <thead><tr>${headers.filter(h => visibleColumns.has(h.key)).map(h => `<th title="${h.key}">${h.name || h.key}</th>`).join('')}</tr></thead>
-            <tbody>
-      `;
+      // Render tableList
+      if (tables.length) {
+        const t = tables[0];
+        const headers = t.headers || [];
+        const rows = t.rows || [];
 
-      rows.forEach(row => {
-        html += '<tr>';
-        headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
-          const cell = row[h.key] || {};
-          const text = cell.text || '';
-          const textModify = cell.textModify || '';
-          const isModified = text !== textModify && textModify;
-          const isError = cell.isFormatError;
+        // Init visible columns (all on first load)
+        if (visibleColumns === null) {
+          visibleColumns = new Set(headers.map(h => h.key));
+        }
 
-          let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
-          let content;
-          if (isModified) {
-            content = `<div class="cell-diff"><span class="original">${escHtml(text)}</span><span class="modified-val">${escHtml(textModify)}</span></div>`;
-          } else {
-            content = escHtml(textModify || text);
-          }
+        html += `
+          <div class="section-header" style="flex-shrink:0;">${t.name || 'Table'} <span class="count">${rows.length} rows</span></div>
+          <div class="col-toggles">
+            ${headers.map(h => `<span class="col-toggle ${visibleColumns.has(h.key) ? 'active' : ''}" data-col="${h.key}">${h.name || h.text || h.key}</span>`).join('')}
+          </div>
+          <div class="table-container" style="flex:1;min-height:0;overflow:auto;">
+            <table>
+              <thead><tr>${headers.filter(h => visibleColumns.has(h.key)).map(h => `<th title="${h.key}">${h.name || h.text || h.key}</th>`).join('')}</tr></thead>
+              <tbody>
+        `;
 
-          html += `<td class="${cellClass}">${content}</td>`;
+        rows.forEach(row => {
+          html += '<tr>';
+          headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
+            const cell = row[h.key] || {};
+            const text = cell.text || '';
+            const textModify = cell.textModify || '';
+            const isModified = text !== textModify && textModify;
+            const isError = cell.isFormatError;
+
+            let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
+            let content;
+            if (isModified) {
+              content = `<div class="cell-diff"><span class="original">${escHtml(text)}</span><span class="modified-val">${escHtml(textModify)}</span></div>`;
+            } else {
+              content = escHtml(textModify || text);
+            }
+
+            html += `<td class="${cellClass}">${content}</td>`;
+          });
+          html += '</tr>';
         });
-        html += '</tr>';
-      });
 
-      html += '</tbody></table></div>';
+        html += '</tbody></table></div>';
+      }
+
       document.getElementById('tableContent').innerHTML = html;
 
       // Attach toggle listeners

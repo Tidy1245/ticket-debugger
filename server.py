@@ -188,29 +188,49 @@ async def get_ticket(request: Request, ticket_id: str):
         "formId": data.get("formId"),
     }
 
-    integrator = data.get("integrator", {})
+    raw_integrator = data.get("integrator", {})
+    # Normalize: if integrator is a list, merge all entries; if dict, wrap as single
+    if isinstance(raw_integrator, list):
+        integrator_list = raw_integrator
+    else:
+        integrator_list = [raw_integrator] if raw_integrator else []
+
+    areas = []
     tables = []
-    for tbl in integrator.get("tableList", []):
-        headers = tbl.get("headerList", [])
-        rows = []
-        for row_cells in tbl.get("data", []):
-            row = {}
-            for cell in row_cells:
-                row[cell["key"]] = {
-                    "text": cell.get("text", ""),
-                    "textModify": cell.get("textModify", ""),
-                    "confidence": cell.get("confidence", []),
-                    "isFormatError": cell.get("isFormatError", False),
-                    "regNdx": cell.get("regNdx"),
-                }
-            rows.append(row)
-        tables.append({
-            "table": tbl.get("table"),
-            "name": tbl.get("name"),
-            "type": tbl.get("type"),
-            "headers": headers,
-            "rows": rows,
-        })
+    for integ in integrator_list:
+        # Extract areaList key-value fields
+        for area in integ.get("areaList", []):
+            areas.append({
+                "key": area.get("key", ""),
+                "name": area.get("name", ""),
+                "text": area.get("text", ""),
+                "textOCR": area.get("textOCR", ""),
+                "confidence": area.get("confidence", []),
+                "confidenceOCR": area.get("confidenceOCR", []),
+            })
+        # Extract tableList
+        for tbl in integ.get("tableList", []):
+            headers = tbl.get("headerList", [])
+            rows = []
+            for row_cells in tbl.get("data", []):
+                row = {}
+                for cell in row_cells:
+                    row[cell["key"]] = {
+                        "text": cell.get("text", ""),
+                        "textModify": cell.get("textModify", ""),
+                        "confidence": cell.get("confidence", []),
+                        "isFormatError": cell.get("isFormatError", False),
+                        "regNdx": cell.get("regNdx"),
+                    }
+                rows.append(row)
+            tables.append({
+                "table": tbl.get("table"),
+                "name": tbl.get("name"),
+                "type": tbl.get("type"),
+                "headers": headers,
+                "rows": rows,
+            })
+    summary["areas"] = areas
     summary["tables"] = tables
 
     pages = []
