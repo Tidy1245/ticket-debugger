@@ -64,21 +64,24 @@
       overflow: hidden;
     }
     .sidebar-header {
-      padding: 20px 20px 16px;
+      padding: 16px 20px;
       border-bottom: 1px solid var(--border);
       cursor: pointer;
-    }
-    .sidebar-header:hover { background: var(--bg-card); }
-    .sidebar-header .title-row {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 14px;
     }
+    .sidebar-header:hover { background: var(--bg-card); }
     .sidebar-header .title-icon {
       position: relative;
-      width: 28px;
-      height: 28px;
+      width: 40px;
+      height: 40px;
       flex-shrink: 0;
+    }
+    .sidebar-header .title-text {
+      flex: 1;
+      text-align: center;
+      padding-right: 40px; /* balance the icon width for visual centering */
     }
     .sidebar-header h1 {
       font-family: 'Fira Code', monospace;
@@ -92,7 +95,7 @@
     .sidebar-header p {
       font-size: 12px;
       color: var(--text-muted);
-      margin-top: 4px;
+      margin-top: 2px;
     }
     .ticket-list {
       flex: 1;
@@ -707,9 +710,9 @@
     }
     .feature-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(2, 1fr);
       gap: 16px;
-      max-width: 800px;
+      max-width: 600px;
       width: 100%;
     }
     .feature-card {
@@ -756,20 +759,18 @@
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-header" id="sidebarHeader" onclick="goHome()">
-        <div class="title-row">
-          <div class="title-icon">
-            <!-- Bug icon -->
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="1.5" style="position:absolute;left:0;top:0;width:18px;height:18px;">
-              <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 9V3"/><path d="M5.4 12H2"/><path d="M22 12h-3.4"/><path d="M6 6l1.8 1.8"/><path d="M16.2 7.8L18 6"/><path d="M6 18l1.8-1.8"/><path d="M16.2 16.2L18 18"/><path d="M12 15v6"/>
-            </svg>
-            <!-- Document icon -->
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="1.5" style="position:absolute;right:0;bottom:0;width:18px;height:18px;">
-              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-          </div>
-          <h1>TICKET DEBUGGER</h1>
+        <div class="title-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="1.5" style="position:absolute;left:0;top:0;width:24px;height:24px;">
+            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 9V3"/><path d="M5.4 12H2"/><path d="M22 12h-3.4"/><path d="M6 6l1.8 1.8"/><path d="M16.2 7.8L18 6"/><path d="M6 18l1.8-1.8"/><path d="M16.2 16.2L18 18"/><path d="M12 15v6"/>
+          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="1.5" style="position:absolute;right:0;bottom:0;width:24px;height:24px;">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
         </div>
-        <p>OCR Pipeline Inspector</p>
+        <div class="title-text">
+          <h1>TICKET DEBUGGER</h1>
+          <p>OCR Pipeline Inspector</p>
+        </div>
       </div>
       <div class="upload-section">
         <div class="upload-drop" id="uploadDrop">
@@ -862,9 +863,6 @@
               </div>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
                 <input type="checkbox" id="showAreas" checked> Show OCR Areas
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
-                <input type="checkbox" id="showCoords"> Show Coords
               </label>
             </div>
             <div class="page-nav" id="pageNav"></div>
@@ -1157,8 +1155,6 @@
         scaleY = img.naturalHeight / processorImgSize.h;
       }
 
-      const showCoords = document.getElementById('showCoords').checked;
-
       areas.forEach((area, i) => {
         const div = document.createElement('div');
         div.className = 'area-overlay' + (area.isFormatError ? ' format-error' : '');
@@ -1167,12 +1163,6 @@
         div.style.width = (area.w * scaleX * zoomLevel) + 'px';
         div.style.height = (area.h * scaleY * zoomLevel) + 'px';
         div.dataset.index = i;
-        if (showCoords) {
-          const label = document.createElement('span');
-          label.style.cssText = 'position:absolute;top:-16px;left:0;font-size:10px;font-family:Fira Code,monospace;color:var(--accent-amber);white-space:nowrap;pointer-events:none;text-shadow:0 0 3px #000,0 0 6px #000;';
-          label.textContent = `(${area.x},${area.y},${area.w},${area.h})`;
-          div.appendChild(label);
-        }
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
         container.appendChild(div);
@@ -1199,6 +1189,7 @@
 
       tt.innerHTML = `
         <div class="tt-label">Area #${area.areaId ?? ''} · ${area.source || ''}</div>
+        <div style="font-family:Fira Code,monospace;font-size:10px;color:var(--text-muted);margin:2px 0 4px;">x:${area.x} y:${area.y} w:${area.w} h:${area.h}</div>
         ${charHtml || `<div class="tt-text">(empty)</div>`}
       `;
       tt.style.display = 'block';
@@ -1212,7 +1203,6 @@
 
     // Image controls
     document.getElementById('showAreas').addEventListener('change', () => renderAreaOverlays());
-    document.getElementById('showCoords').addEventListener('change', () => renderAreaOverlays());
 
     const viewBtns = ['btnFit', 'btnFitPage'];
     function setViewMode(mode, activeId) {
