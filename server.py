@@ -116,6 +116,25 @@ async def upload_ticket(request: Request, files: List[UploadFile] = File(...)):
     return {"ticketId": ticket_id, "fileCount": len(saved_files)}
 
 
+@app.put("/api/tickets/{ticket_id}/config")
+async def update_config(request: Request, ticket_id: str, file: UploadFile = File(...)):
+    """Update config.json for a ticket."""
+    ip = get_ip(request)
+    touch_ip(ip)
+    ticket_dir = ip_dir(ip) / ticket_id
+    if not ticket_dir.exists():
+        raise HTTPException(404, "Ticket not found")
+    content = await file.read()
+    # Validate JSON
+    try:
+        json.loads(content)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Invalid JSON file")
+    config_path = ticket_dir / "config.json"
+    config_path.write_bytes(content)
+    return {"updated": ticket_id}
+
+
 @app.delete("/api/tickets/{ticket_id}")
 async def delete_ticket(request: Request, ticket_id: str):
     """Delete a single ticket."""

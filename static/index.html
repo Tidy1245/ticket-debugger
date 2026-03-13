@@ -636,8 +636,27 @@
       opacity: 0;
       transition: all var(--transition);
     }
-    .ticket-item:hover .ticket-delete { opacity: 1; }
+    .ticket-update {
+      position: absolute;
+      top: 10px;
+      right: 38px;
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all var(--transition);
+    }
+    .ticket-item:hover .ticket-delete,
+    .ticket-item:hover .ticket-update { opacity: 1; }
     .ticket-delete:hover { color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
+    .ticket-update:hover { color: var(--accent-blue); background: rgba(59, 130, 246, 0.1); }
 
     /* Delete all button */
     .delete-all-bar {
@@ -911,6 +930,9 @@
       }
       el.innerHTML = tickets.map(t => `
         <div class="ticket-item" data-id="${t.ticketId}" onclick="selectTicket('${t.ticketId}')">
+          <button class="ticket-update" onclick="event.stopPropagation();triggerConfigUpdate('${t.ticketId}')" title="Update config.json">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </button>
           <button class="ticket-delete" onclick="event.stopPropagation();deleteTicket('${t.ticketId}')" title="Delete">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
@@ -1453,12 +1475,7 @@
     async function deleteTicket(id) {
       if (!confirm(`Delete ticket ${id}?`)) return;
       await fetch(`/api/tickets/${id}`, { method: 'DELETE' });
-      if (currentTicket === id) {
-        currentTicket = null;
-        ticketData = null;
-        document.getElementById('ticketView').style.display = 'none';
-        document.getElementById('emptyState').style.display = '';
-      }
+      if (currentTicket === id) goHome();
       const tickets = await fetchJSON('/api/tickets');
       renderTicketList(tickets);
     }
@@ -1467,13 +1484,43 @@
     async function deleteAllTickets() {
       if (!confirm('Delete all tickets?')) return;
       await fetch('/api/tickets', { method: 'DELETE' });
-      currentTicket = null;
-      ticketData = null;
-      document.getElementById('ticketView').style.display = 'none';
-      document.getElementById('emptyState').style.display = '';
+      goHome();
       const tickets = await fetchJSON('/api/tickets');
       renderTicketList(tickets);
     }
+
+    // --- Update config.json ---
+    let updateTargetTicket = null;
+    const configInput = document.createElement('input');
+    configInput.type = 'file';
+    configInput.accept = '.json';
+    configInput.style.display = 'none';
+    document.body.appendChild(configInput);
+
+    function triggerConfigUpdate(ticketId) {
+      updateTargetTicket = ticketId;
+      configInput.value = '';
+      configInput.click();
+    }
+
+    configInput.addEventListener('change', async () => {
+      if (!configInput.files.length || !updateTargetTicket) return;
+      const file = configInput.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`/api/tickets/${updateTargetTicket}/config`, { method: 'PUT', body: formData });
+      if (res.ok) {
+        const tickets = await fetchJSON('/api/tickets');
+        renderTicketList(tickets);
+        if (currentTicket === updateTargetTicket) {
+          currentTicket = null;
+          await selectTicket(updateTargetTicket);
+        }
+      } else {
+        alert('Failed to update config.json');
+      }
+      updateTargetTicket = null;
+    });
 
     // --- Heartbeat (keep session alive while page is open) ---
     setInterval(() => {
