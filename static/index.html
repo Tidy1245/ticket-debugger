@@ -149,7 +149,9 @@
     .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
     .badge-error { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
     .badge-type { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
-    .badge-project { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .badge-project { background: rgba(234, 179, 8, 0.15); color: #eab308; }
+    .search-option { font-size: 11px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 3px; user-select: none; white-space: nowrap; }
+    .search-option input { margin: 0; cursor: pointer; }
 
     /* Main content */
     .main {
@@ -1110,9 +1112,9 @@
           <div class="ticket-id">${t.ticketId}</div>
           <div class="ticket-name">${t.name || 'Untitled'}</div>
           <div class="ticket-meta">
+            ${t.project ? `<span class="badge badge-project">${t.project}</span>` : ''}
             <span class="badge ${t.result === 0 ? 'badge-success' : 'badge-error'}">${t.result === 0 ? 'OK' : 'ERR'}</span>
             <span class="badge badge-type">${t.expectType || ''}</span>
-            ${t.project ? `<span class="badge badge-project">${t.project}</span>` : ''}
           </div>
         </div>
       `).join('');
@@ -1624,15 +1626,23 @@
     // --- Table ---
     let visibleColumns = null; // null = all visible
     let tableSearchQuery = '';
+    let tableSearchCaseSensitive = false;
+    let tableSearchExact = false;
+
+    function tableSearchMatch(value, query) {
+      if (!query) return true;
+      const v = tableSearchCaseSensitive ? value : value.toLowerCase();
+      const q = tableSearchCaseSensitive ? query : query.toLowerCase();
+      return tableSearchExact ? v === q : v.includes(q);
+    }
 
     function renderTable() {
       const areas = ticketData.areas || [];
       const tables = ticketData.tables || [];
-      const q = tableSearchQuery.toLowerCase();
+      const q = tableSearchQuery;
 
       if (!areas.length && !tables.length) {
         document.getElementById('tableContent').innerHTML = '<p style="color:var(--text-muted);">No table data available</p>';
-        document.getElementById('tableSearchInfo').textContent = '';
         return;
       }
 
@@ -1641,9 +1651,9 @@
       // Render areaList as key-value grid (filter by search)
       if (areas.length) {
         const filteredAreas = q ? areas.filter(a => {
-          const val = (a.text || a.textOCR || '').toLowerCase();
-          const label = (a.name || a.key || '').toLowerCase();
-          return val.includes(q) || label.includes(q);
+          const val = a.text || a.textOCR || '';
+          const label = a.name || a.key || '';
+          return tableSearchMatch(val, q) || tableSearchMatch(label, q);
         }) : areas;
         html += `<div class="section-header" style="flex-shrink:0;">Fields <span class="count">${filteredAreas.length}</span></div>`;
         if (filteredAreas.length) {
@@ -1667,9 +1677,7 @@
         const rows = q ? allRows.filter(row => {
           return headers.some(h => {
             const cell = row[h.key] || {};
-            const text = (cell.text || '').toLowerCase();
-            const textMod = (cell.textModify || '').toLowerCase();
-            return text.includes(q) || textMod.includes(q);
+            return tableSearchMatch(cell.text || '', q) || tableSearchMatch(cell.textModify || '', q);
           });
         }) : allRows;
 
@@ -1683,7 +1691,8 @@
             ${t.name || 'Table'} <span class="count">${rows.length}${q ? '/' + allRows.length : ''} rows</span>
             <div style="flex:1;"></div>
             <div class="search-bar" style="flex-shrink:0;">
-              <span class="search-info" id="tableSearchInfo"></span>
+              <label class="search-option"><input type="checkbox" id="tableSearchCase" ${tableSearchCaseSensitive ? 'checked' : ''}> Aa</label>
+              <label class="search-option"><input type="checkbox" id="tableSearchExact" ${tableSearchExact ? 'checked' : ''}> Exact</label>
               <div class="search-wrap">
                 <input type="text" id="tableSearchInput" placeholder="Search table text..." value="${escHtml(tableSearchQuery)}">
                 <button class="search-clear" id="tableSearchClear">&times;</button>
@@ -1737,23 +1746,6 @@
 
       document.getElementById('tableContent').innerHTML = html;
 
-      // Search info
-      const infoEl = document.getElementById('tableSearchInfo');
-      if (infoEl) {
-        if (q && tables.length) {
-          const allRows = tables[0].rows || [];
-          const filtered = q ? allRows.filter(row => {
-            return (tables[0].headers || []).some(h => {
-              const cell = row[h.key] || {};
-              return (cell.text || '').toLowerCase().includes(q) || (cell.textModify || '').toLowerCase().includes(q);
-            });
-          }).length : allRows.length;
-          infoEl.textContent = `${filtered}/${allRows.length} rows`;
-        } else {
-          infoEl.textContent = '';
-        }
-      }
-
       // Attach search bar listeners (dynamically rendered)
       const searchInput = document.getElementById('tableSearchInput');
       const searchClear = document.getElementById('tableSearchClear');
@@ -1773,6 +1765,20 @@
         searchClear.addEventListener('click', () => {
           tableSearchQuery = '';
           renderTable();
+        });
+      }
+      const caseCheck = document.getElementById('tableSearchCase');
+      const exactCheck = document.getElementById('tableSearchExact');
+      if (caseCheck) {
+        caseCheck.addEventListener('change', () => {
+          tableSearchCaseSensitive = caseCheck.checked;
+          if (tableSearchQuery) renderTable();
+        });
+      }
+      if (exactCheck) {
+        exactCheck.addEventListener('change', () => {
+          tableSearchExact = exactCheck.checked;
+          if (tableSearchQuery) renderTable();
         });
       }
 
