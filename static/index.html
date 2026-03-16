@@ -1657,6 +1657,20 @@
 
       let html = '';
 
+      // Search bar fixed at top-right
+      html += `<div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
+        <div style="flex:1;"></div>
+        <div class="search-bar" style="flex-shrink:0;">
+          <div class="search-wrap">
+            <input type="text" id="tableSearchInput" placeholder="Search data text..." value="${escHtml(tableSearchQuery)}">
+            <button class="search-clear" id="tableSearchClear">&times;</button>
+          </div>
+          <button class="search-toggle ${tableSearchCaseSensitive ? 'active' : ''}" id="tableSearchCase" title="Match Case">Aa</button>
+          <button class="search-toggle ${tableSearchExact ? 'active' : ''}" id="tableSearchExact" title="Match Whole Word" style="font-size:12px;font-weight:700;font-family:'Fira Code',monospace;letter-spacing:-0.5px;">ab<span style="position:absolute;bottom:2px;left:4px;right:4px;height:1.5px;background:currentColor;border-radius:1px;"></span>
+          </button>
+        </div>
+      </div>`;
+
       // Render areaList as key-value grid (filter by search)
       if (areas.length) {
         const filteredAreas = q ? areas.filter(a => {
@@ -1695,19 +1709,16 @@
           visibleColumns = new Set(headers.map(h => h.key));
         }
 
+        // Detect empty table (single row with all empty text and (0,0,1,1) coords)
+        const isEmptyTable = allRows.length === 1 && headers.every(h => {
+          const cell = allRows[0][h.key] || {};
+          return !(cell.text || '') && !(cell.textModify || '') && cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1;
+        });
+        const rowCountLabel = isEmptyTable ? 'empty row' : `${rows.length}${q ? '/' + allRows.length : ''} rows`;
+
         html += `
           <div class="section-header" style="flex-shrink:0;">
-            ${t.name || 'Table'} <span class="count">${rows.length}${q ? '/' + allRows.length : ''} rows</span>
-            <div style="flex:1;"></div>
-            <div class="search-bar" style="flex-shrink:0;">
-              <div class="search-wrap">
-                <input type="text" id="tableSearchInput" placeholder="Search table text..." value="${escHtml(tableSearchQuery)}">
-                <button class="search-clear" id="tableSearchClear">&times;</button>
-              </div>
-              <button class="search-toggle ${tableSearchCaseSensitive ? 'active' : ''}" id="tableSearchCase" title="Match Case">Aa</button>
-              <button class="search-toggle ${tableSearchExact ? 'active' : ''}" id="tableSearchExact" title="Match Whole Word" style="font-size:12px;font-weight:700;font-family:'Fira Code',monospace;letter-spacing:-0.5px;">ab<span style="position:absolute;bottom:2px;left:4px;right:4px;height:1.5px;background:currentColor;border-radius:1px;"></span>
-              </button>
-            </div>
+            ${t.name || 'Table'} <span class="count">${rowCountLabel}</span>
           </div>
           <div class="col-toggles">
             ${headers.map(h => `<span class="col-toggle ${visibleColumns.has(h.key) ? 'active' : ''}" data-col="${h.key}">${h.name || h.text || h.key}</span>`).join('')}
