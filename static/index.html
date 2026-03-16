@@ -504,12 +504,12 @@
       gap: 2px;
     }
     .cell-diff .original {
-      color: var(--text-muted);
+      color: var(--accent-amber);
       text-decoration: line-through;
       font-size: 11px;
     }
     .cell-diff .modified-val {
-      color: var(--accent-amber);
+      color: #22c55e;
     }
     /* Area list (key-value fields) */
     .area-grid {
@@ -1039,7 +1039,10 @@
                 <input type="checkbox" id="showAreas" checked> Show OCR Areas
               </label>
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
-                <input type="checkbox" id="showTexts"> Show Texts
+                <input type="checkbox" id="showOcrTexts"> Show OCR Texts
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                <input type="checkbox" id="tableImgPos"> Table-Image Position
               </label>
               <div style="flex:1;"></div>
               <div class="search-bar">
@@ -1333,6 +1336,7 @@
         procImg.onload = () => {
           processorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
           renderAreaOverlays(); // re-render with correct scale
+          renderCellHighlight(); // re-render cell highlight with correct scale
         };
       }
 
@@ -1370,7 +1374,7 @@
         scaleY = img.naturalHeight / processorImgSize.h;
       }
 
-      const showTexts = document.getElementById('showTexts').checked;
+      const showTexts = document.getElementById('showOcrTexts').checked;
 
       areas.forEach((area, i) => {
         const div = document.createElement('div');
@@ -1435,7 +1439,16 @@
 
     // Image controls
     document.getElementById('showAreas').addEventListener('change', () => renderAreaOverlays());
-    document.getElementById('showTexts').addEventListener('change', () => renderAreaOverlays());
+    document.getElementById('showOcrTexts').addEventListener('change', () => renderAreaOverlays());
+    document.getElementById('tableImgPos').addEventListener('change', () => {
+      if (!document.getElementById('tableImgPos').checked) {
+        // Hide cell highlight but keep cell-active in table
+        const container = document.getElementById('imageContainer');
+        if (container) container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
+      } else {
+        renderCellHighlight();
+      }
+    });
 
     const viewBtns = ['btnFit', 'btnFitPage'];
     function setViewMode(mode, activeId) {
@@ -1508,6 +1521,10 @@
     async function performOcrSearch(query) {
       ocrSearchResults = [];
       ocrSearchCurrent = -1;
+      // Clear cell highlight to avoid conflicts
+      cellHighlightData = null;
+      const container = document.getElementById('imageContainer');
+      if (container) container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
       if (!query || !ticketData) {
         updateOcrSearchUI();
         renderAreaOverlays();
@@ -1739,6 +1756,18 @@
     async function locateCell(x, y, w, h, pageIdx, key, text) {
       cellHighlightData = { x, y, w, h, key, text };
 
+      // Auto-enable Table-Image Position toggle
+      document.getElementById('tableImgPos').checked = true;
+
+      // Clear OCR search to avoid conflicts
+      const ocrInput = document.getElementById('ocrSearchInput');
+      if (ocrInput.value) {
+        ocrInput.value = '';
+        ocrSearchResults = [];
+        ocrSearchCurrent = -1;
+        document.getElementById('ocrSearchInfo').textContent = '';
+      }
+
       // Switch to Images tab
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -1753,6 +1782,7 @@
         await loadPageImage();
       } else {
         renderAreaOverlays();
+        renderCellHighlight();
       }
 
       // Scroll to highlight after render
@@ -1763,6 +1793,7 @@
       const container = document.getElementById('imageContainer');
       container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
       if (!cellHighlightData) return;
+      if (!document.getElementById('tableImgPos').checked) return;
 
       const img = document.getElementById('pageImg');
       if (!img || !img.naturalWidth) return;
