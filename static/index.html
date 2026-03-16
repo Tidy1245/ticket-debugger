@@ -149,6 +149,7 @@
     .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
     .badge-error { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
     .badge-type { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
+    .badge-project { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
 
     /* Main content */
     .main {
@@ -1062,11 +1063,14 @@
 
           <!-- Table Panel -->
           <div class="panel" id="panelTable">
-            <div class="search-bar" style="margin-bottom:10px;justify-content:flex-end;">
-              <span class="search-info" id="tableSearchInfo"></span>
-              <div class="search-wrap">
-                <input type="text" id="tableSearchInput" placeholder="Search table text...">
-                <button class="search-clear" id="tableSearchClear">&times;</button>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-shrink:0;">
+              <div class="section-header" style="margin-bottom:0;padding-bottom:0;border-bottom:none;flex:1;">Table Data</div>
+              <div class="search-bar" style="flex-shrink:0;">
+                <span class="search-info" id="tableSearchInfo"></span>
+                <div class="search-wrap">
+                  <input type="text" id="tableSearchInput" placeholder="Search table text...">
+                  <button class="search-clear" id="tableSearchClear">&times;</button>
+                </div>
               </div>
             </div>
             <div id="tableContent" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;"></div>
@@ -1118,6 +1122,7 @@
           <div class="ticket-meta">
             <span class="badge ${t.result === 0 ? 'badge-success' : 'badge-error'}">${t.result === 0 ? 'OK' : 'ERR'}</span>
             <span class="badge badge-type">${t.expectType || ''}</span>
+            ${t.project ? `<span class="badge badge-project">${t.project}</span>` : ''}
           </div>
         </div>
       `).join('');
@@ -1553,7 +1558,14 @@
         }
       }
       if (ocrSearchResults.length > 0) {
-        ocrSearchCurrent = 0;
+        // Start from the result closest to the current page
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < ocrSearchResults.length; i++) {
+          const dist = Math.abs(ocrSearchResults[i].pageIndex - currentPageIndex);
+          if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+        }
+        ocrSearchCurrent = bestIdx;
         await goToOcrResult();
       }
       updateOcrSearchUI();
