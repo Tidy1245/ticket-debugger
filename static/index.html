@@ -933,13 +933,14 @@
       <div class="sidebar-header" id="sidebarHeader" onclick="goHome()">
         <div class="title-icon">
           <svg viewBox="0 0 40 40" fill="none" width="40" height="40">
-            <!-- Document (blue) -->
-            <path d="M8 4h14l8 8v22a2 2 0 01-2 2H8a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="var(--accent-blue)" stroke-width="1.8" fill="none"/>
-            <path d="M22 4v8h8" stroke="var(--accent-blue)" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
-            <path d="M11 18h10M11 22h8M11 26h6" stroke="var(--accent-blue)" stroke-width="1.5" stroke-linecap="round"/>
-            <!-- Magnifying glass (golden) -->
-            <circle cx="27" cy="27" r="7" stroke="#eab308" stroke-width="2" fill="rgba(234,179,8,0.08)"/>
-            <line x1="32" y1="32" x2="38" y2="38" stroke="#eab308" stroke-width="2.5" stroke-linecap="round"/>
+            <!-- Document (blue, behind) -->
+            <path d="M4 6a2 2 0 012-2h12l6 6v20a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" stroke="var(--accent-blue)" stroke-width="1.8"/>
+            <path d="M18 4v6h6" stroke="var(--accent-blue)" stroke-width="1.8" stroke-linejoin="round"/>
+            <!-- Text lines visible through glass -->
+            <path d="M9 16h10M9 20h8M9 24h6" stroke="var(--accent-blue)" stroke-width="1.4" stroke-linecap="round"/>
+            <!-- Magnifying glass (golden, front, large centered) -->
+            <circle cx="24" cy="22" r="10" stroke="#eab308" stroke-width="2.2" fill="rgba(234,179,8,0.06)"/>
+            <line x1="31" y1="29" x2="38" y2="36" stroke="#eab308" stroke-width="2.8" stroke-linecap="round"/>
           </svg>
         </div>
         <div class="title-text">
@@ -978,11 +979,15 @@
       <div class="homepage" id="homePage">
         <div>
           <div class="homepage-icon" style="margin:0 auto 16px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" stroke-width="1.5" style="position:absolute;left:0;top:0;width:48px;height:48px;">
-              <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M12 9V3"/><path d="M5.4 12H2"/><path d="M22 12h-3.4"/><path d="M6 6l1.8 1.8"/><path d="M16.2 7.8L18 6"/><path d="M6 18l1.8-1.8"/><path d="M16.2 16.2L18 18"/><path d="M12 15v6"/>
-            </svg>
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="1.5" style="position:absolute;right:0;bottom:0;width:48px;height:48px;">
-              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            <svg viewBox="0 0 40 40" fill="none" width="80" height="80">
+              <!-- Document (blue, behind) -->
+              <path d="M4 6a2 2 0 012-2h12l6 6v20a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" stroke="var(--accent-blue)" stroke-width="1.8"/>
+              <path d="M18 4v6h6" stroke="var(--accent-blue)" stroke-width="1.8" stroke-linejoin="round"/>
+              <!-- Text lines -->
+              <path d="M9 16h10M9 20h8M9 24h6" stroke="var(--accent-blue)" stroke-width="1.4" stroke-linecap="round"/>
+              <!-- Magnifying glass (golden, front) -->
+              <circle cx="24" cy="22" r="10" stroke="#eab308" stroke-width="2.2" fill="rgba(234,179,8,0.06)"/>
+              <line x1="31" y1="29" x2="38" y2="36" stroke="#eab308" stroke-width="2.8" stroke-linecap="round"/>
             </svg>
           </div>
           <h2>Ticket Debugger</h2>
