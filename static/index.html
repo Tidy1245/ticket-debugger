@@ -1091,7 +1091,7 @@
 
     // --- Fetch helpers ---
     async function fetchJSON(url) {
-      const res = await fetch(API + url);
+      const res = await fetch(API + url, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     }
