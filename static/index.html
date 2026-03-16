@@ -1063,16 +1063,6 @@
 
           <!-- Table Panel -->
           <div class="panel" id="panelTable">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-shrink:0;">
-              <div class="section-header" style="margin-bottom:0;padding-bottom:0;border-bottom:none;flex:1;">Table Data</div>
-              <div class="search-bar" style="flex-shrink:0;">
-                <span class="search-info" id="tableSearchInfo"></span>
-                <div class="search-wrap">
-                  <input type="text" id="tableSearchInput" placeholder="Search table text...">
-                  <button class="search-clear" id="tableSearchClear">&times;</button>
-                </div>
-              </div>
-            </div>
             <div id="tableContent" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;"></div>
           </div>
         </div>
@@ -1147,8 +1137,7 @@
       cellHighlightData = null;
       document.getElementById('ocrSearchInput').value = '';
       document.getElementById('ocrSearchInfo').textContent = '';
-      document.getElementById('tableSearchInput').value = '';
-      document.getElementById('tableSearchInfo').textContent = '';
+      // tableSearchInput is dynamically rendered in renderTable(), no need to clear here
 
       // Update sidebar active state
       document.querySelectorAll('.ticket-item').forEach(el => {
@@ -1690,7 +1679,17 @@
         }
 
         html += `
-          <div class="section-header" style="flex-shrink:0;">${t.name || 'Table'} <span class="count">${rows.length}${q ? '/' + allRows.length : ''} rows</span></div>
+          <div class="section-header" style="flex-shrink:0;">
+            ${t.name || 'Table'} <span class="count">${rows.length}${q ? '/' + allRows.length : ''} rows</span>
+            <div style="flex:1;"></div>
+            <div class="search-bar" style="flex-shrink:0;">
+              <span class="search-info" id="tableSearchInfo"></span>
+              <div class="search-wrap">
+                <input type="text" id="tableSearchInput" placeholder="Search table text..." value="${escHtml(tableSearchQuery)}">
+                <button class="search-clear" id="tableSearchClear">&times;</button>
+              </div>
+            </div>
+          </div>
           <div class="col-toggles">
             ${headers.map(h => `<span class="col-toggle ${visibleColumns.has(h.key) ? 'active' : ''}" data-col="${h.key}">${h.name || h.text || h.key}</span>`).join('')}
           </div>
@@ -1740,17 +1739,41 @@
 
       // Search info
       const infoEl = document.getElementById('tableSearchInfo');
-      if (q && tables.length) {
-        const allRows = tables[0].rows || [];
-        const filtered = q ? allRows.filter(row => {
-          return (tables[0].headers || []).some(h => {
-            const cell = row[h.key] || {};
-            return (cell.text || '').toLowerCase().includes(q) || (cell.textModify || '').toLowerCase().includes(q);
-          });
-        }).length : allRows.length;
-        infoEl.textContent = `${filtered}/${allRows.length} rows`;
-      } else {
-        infoEl.textContent = '';
+      if (infoEl) {
+        if (q && tables.length) {
+          const allRows = tables[0].rows || [];
+          const filtered = q ? allRows.filter(row => {
+            return (tables[0].headers || []).some(h => {
+              const cell = row[h.key] || {};
+              return (cell.text || '').toLowerCase().includes(q) || (cell.textModify || '').toLowerCase().includes(q);
+            });
+          }).length : allRows.length;
+          infoEl.textContent = `${filtered}/${allRows.length} rows`;
+        } else {
+          infoEl.textContent = '';
+        }
+      }
+
+      // Attach search bar listeners (dynamically rendered)
+      const searchInput = document.getElementById('tableSearchInput');
+      const searchClear = document.getElementById('tableSearchClear');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          clearTimeout(tableSearchTimer);
+          tableSearchTimer = setTimeout(() => {
+            tableSearchQuery = e.target.value.trim();
+            renderTable();
+          }, 300);
+        });
+        // Restore cursor position after re-render
+        searchInput.focus();
+        searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+      }
+      if (searchClear) {
+        searchClear.addEventListener('click', () => {
+          tableSearchQuery = '';
+          renderTable();
+        });
       }
 
       // Attach toggle listeners
@@ -1873,20 +1896,6 @@
 
     // Table search
     let tableSearchTimer = null;
-    document.getElementById('tableSearchInput').addEventListener('input', (e) => {
-      clearTimeout(tableSearchTimer);
-      tableSearchTimer = setTimeout(() => {
-        tableSearchQuery = e.target.value.trim();
-        renderTable();
-      }, 300);
-    });
-    document.getElementById('tableSearchClear').addEventListener('click', () => {
-      const input = document.getElementById('tableSearchInput');
-      input.value = '';
-      input.focus();
-      tableSearchQuery = '';
-      renderTable();
-    });
 
     // --- Upload ---
     const TICKET_NAME_RE = /^\d{12}[A-Za-z0-9]{4}$/;
@@ -2152,9 +2161,18 @@
       if (res.ok) {
         const tickets = await fetchJSON('/api/tickets');
         renderTicketList(tickets);
+        // Reload current ticket data if it's the one being updated
         if (currentTicket === updateTargetTicket) {
-          currentTicket = null;
-          await selectTicket(updateTargetTicket);
+          pageAreas = {};
+          visibleColumns = null;
+          tableSearchQuery = '';
+          cellHighlightData = null;
+          currentPageIndex = 0;
+          ticketData = await fetchJSON(`/api/tickets/${currentTicket}`);
+          renderOverview();
+          renderPageNav();
+          renderTable();
+          loadPageImage();
         }
       } else {
         alert('Failed to update config.json');
