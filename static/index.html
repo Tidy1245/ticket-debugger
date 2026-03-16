@@ -799,7 +799,7 @@
       background: var(--bg-input);
       color: var(--text-primary);
       outline: none;
-      width: 180px;
+      width: 240px;
       transition: border-color var(--transition);
     }
     .search-bar input:focus { border-color: var(--accent-blue); }
@@ -1701,15 +1701,13 @@
             <div style="flex:1;"></div>
             <div class="search-bar" style="flex-shrink:0;">
               <div class="search-wrap">
-                <input type="text" id="tableSearchInput" placeholder="Search table text..." value="${escHtml(tableSearchQuery)}" style="padding-right:62px;">
-                <div style="position:absolute;right:24px;display:flex;gap:2px;">
-                  <button class="search-toggle ${tableSearchCaseSensitive ? 'active' : ''}" id="tableSearchCase" title="Match Case">Aa</button>
-                  <button class="search-toggle ${tableSearchExact ? 'active' : ''}" id="tableSearchExact" title="Match Whole Word">
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5h3v-1H1v1zm12.5 0H16v-1h-2.5v1zM6 3.5h4.5v-1H6v1zM1 12.5h3v-1H1v1zm12.5 0H16v-1h-2.5v1zM6 12.5h4.5v-1H6v1zM2.25 6h1.5L5.5 11H4.1l-.4-1.2H1.8L1.4 11H0L2.25 6zm-.15 3h1.8L3 6.8 2.1 9zM9 6h1.2l1.8 3.2L13.8 6H15v5h-1.1V7.6L12.1 11h-.7L9.6 7.6V11H8.5V6z"/></svg>
-                  </button>
-                </div>
+                <input type="text" id="tableSearchInput" placeholder="Search table text..." value="${escHtml(tableSearchQuery)}">
                 <button class="search-clear" id="tableSearchClear">&times;</button>
               </div>
+              <button class="search-toggle ${tableSearchCaseSensitive ? 'active' : ''}" id="tableSearchCase" title="Match Case">Aa</button>
+              <button class="search-toggle ${tableSearchExact ? 'active' : ''}" id="tableSearchExact" title="Match Whole Word">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5h3v-1H1v1zm12.5 0H16v-1h-2.5v1zM6 3.5h4.5v-1H6v1zM1 12.5h3v-1H1v1zm12.5 0H16v-1h-2.5v1zM6 12.5h4.5v-1H6v1zM2.25 6h1.5L5.5 11H4.1l-.4-1.2H1.8L1.4 11H0L2.25 6zm-.15 3h1.8L3 6.8 2.1 9zM9 6h1.2l1.8 3.2L13.8 6H15v5h-1.1V7.6L12.1 11h-.7L9.6 7.6V11H8.5V6z"/></svg>
+              </button>
             </div>
           </div>
           <div class="col-toggles">
