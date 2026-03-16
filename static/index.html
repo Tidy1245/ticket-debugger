@@ -150,7 +150,7 @@
     .badge-error { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
     .badge-type { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
     .badge-project { background: rgba(234, 179, 8, 0.15); color: #eab308; }
-    .search-toggle { width: 28px; height: 22px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: 'Fira Code', monospace; display: flex; align-items: center; justify-content: center; transition: all var(--transition); user-select: none; padding: 0; }
+    .search-toggle { position: relative; width: 28px; height: 22px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); cursor: pointer; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: 'Fira Code', monospace; display: flex; align-items: center; justify-content: center; transition: all var(--transition); user-select: none; padding: 0; }
     .search-toggle:hover { border-color: var(--text-secondary); color: var(--text-secondary); }
     .search-toggle.active { background: rgba(59, 130, 246, 0.2); border-color: var(--accent-blue); color: var(--accent-blue); }
 
@@ -1705,8 +1705,7 @@
                 <button class="search-clear" id="tableSearchClear">&times;</button>
               </div>
               <button class="search-toggle ${tableSearchCaseSensitive ? 'active' : ''}" id="tableSearchCase" title="Match Case">Aa</button>
-              <button class="search-toggle ${tableSearchExact ? 'active' : ''}" id="tableSearchExact" title="Match Whole Word">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5h3v-1H1v1zm12.5 0H16v-1h-2.5v1zM6 3.5h4.5v-1H6v1zM1 12.5h3v-1H1v1zm12.5 0H16v-1h-2.5v1zM6 12.5h4.5v-1H6v1zM2.25 6h1.5L5.5 11H4.1l-.4-1.2H1.8L1.4 11H0L2.25 6zm-.15 3h1.8L3 6.8 2.1 9zM9 6h1.2l1.8 3.2L13.8 6H15v5h-1.1V7.6L12.1 11h-.7L9.6 7.6V11H8.5V6z"/></svg>
+              <button class="search-toggle ${tableSearchExact ? 'active' : ''}" id="tableSearchExact" title="Match Whole Word" style="font-size:12px;font-weight:700;font-family:'Fira Code',monospace;letter-spacing:-0.5px;">ab<span style="position:absolute;bottom:2px;left:4px;right:4px;height:1.5px;background:currentColor;border-radius:1px;"></span>
               </button>
             </div>
           </div>
