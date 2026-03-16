@@ -504,8 +504,7 @@
       gap: 2px;
     }
     .cell-diff .original {
-      color: var(--accent-amber);
-      text-decoration: line-through;
+      color: var(--accent-red);
       font-size: 11px;
     }
     .cell-diff .modified-val {
@@ -1063,12 +1062,12 @@
 
           <!-- Table Panel -->
           <div class="panel" id="panelTable">
-            <div class="search-bar" style="margin-bottom:10px;">
+            <div class="search-bar" style="margin-bottom:10px;justify-content:flex-end;">
+              <span class="search-info" id="tableSearchInfo"></span>
               <div class="search-wrap">
                 <input type="text" id="tableSearchInput" placeholder="Search table text...">
                 <button class="search-clear" id="tableSearchClear">&times;</button>
               </div>
-              <span class="search-info" id="tableSearchInfo"></span>
             </div>
             <div id="tableContent" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;"></div>
           </div>
@@ -1337,6 +1336,17 @@
           processorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
           renderAreaOverlays(); // re-render with correct scale
           renderCellHighlight(); // re-render cell highlight with correct scale
+          // Scroll to active elements after correct scaling
+          requestAnimationFrame(() => {
+            const cellHl = document.querySelector('.cell-highlight');
+            if (cellHl) scrollToCellHighlight();
+            const ocrHl = document.querySelector('.area-overlay.search-active');
+            if (ocrHl) {
+              const left = parseInt(ocrHl.style.left) - imageViewport.clientWidth / 2 + parseInt(ocrHl.style.width) / 2;
+              const top = parseInt(ocrHl.style.top) - imageViewport.clientHeight / 2 + parseInt(ocrHl.style.height) / 2;
+              imageViewport.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: 'smooth' });
+            }
+          });
         };
       }
 
@@ -1559,6 +1569,15 @@
       } else {
         renderAreaOverlays();
       }
+      // Scroll to the active search result overlay
+      requestAnimationFrame(() => {
+        const active = document.querySelector('.area-overlay.search-active');
+        if (active) {
+          const left = parseInt(active.style.left) - imageViewport.clientWidth / 2 + parseInt(active.style.width) / 2;
+          const top = parseInt(active.style.top) - imageViewport.clientHeight / 2 + parseInt(active.style.height) / 2;
+          imageViewport.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: 'smooth' });
+        }
+      });
     }
 
     function updateOcrSearchUI() {
