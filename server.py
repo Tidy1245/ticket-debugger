@@ -420,16 +420,14 @@ Group the data rows into logical groups (e.g., each product/item is one group).
 
 {hints_str}
 
-Image size: {img_w} x {img_h} pixels. Coordinates: top-left is (0,0), Y increases downward.
-
-Output JSON array with each group's Y-coordinate range (in actual pixel coordinates):
-[{{"group": 1, "y_start": N, "y_end": N, "description": "..."}}]
+Output JSON with your estimated image height and each group's Y-coordinate range:
+{{"image_height": H, "groups": [{{"group": 1, "y_start": N, "y_end": N, "description": "..."}}]}}
 
 Rules:
 1. Each group contains all related data lines for one logical item
-2. y_start and y_end should cover the full vertical range of that group
-3. Use actual pixel coordinates matching the image dimensions ({img_w}x{img_h})
-4. Only output JSON array, no other text"""
+2. y_start and y_end should cover the full vertical range of that group in the image
+3. image_height is the total height of the image as you perceive it
+4. Only output JSON, no other text"""
 
     # Call VLM
     t0 = time.time()
@@ -460,23 +458,31 @@ Rules:
             js = content.split("```json")[1].split("```")[0]
         elif "```" in content:
             js = content.split("```")[1].split("```")[0]
-        vlm_groups = json.loads(js.strip())
-        if isinstance(vlm_groups, dict):
-            vlm_groups = vlm_groups.get("groups", vlm_groups.get("tables", []))
+        parsed = json.loads(js.strip())
+        if isinstance(parsed, list):
+            vlm_groups = parsed
+            vlm_img_h = 0
+        else:
+            vlm_groups = parsed.get("groups", parsed.get("tables", []))
+            vlm_img_h = parsed.get("image_height", 0)
     except (json.JSONDecodeError, IndexError):
         raise HTTPException(500, f"Failed to parse VLM response: {content[:500]}")
+
+    # Scale VLM coordinates to real image coordinates
+    scale_y = img_h / vlm_img_h if vlm_img_h and img_h else 1.0
 
     # Match OCR areas to groups by Y-coordinate
     groups = []
     assigned = set()
     for g in vlm_groups:
-        y1 = g.get("y_start", 0)
-        y2 = g.get("y_end", 0)
+        y1 = g.get("y_start", 0) * scale_y
+        y2 = g.get("y_end", 0) * scale_y
+        margin = (y2 - y1) * 0.1  # 10% margin for tolerance
         desc = g.get("description", "")
         matched_areas = []
         for i, area in enumerate(areas):
             cy = area.get("y", 0) + area.get("h", 0) / 2
-            if y1 <= cy <= y2 and i not in assigned:
+            if (y1 - margin) <= cy <= (y2 + margin) and i not in assigned:
                 assigned.add(i)
                 matched_areas.append({
                     "areaId": i,
@@ -496,6 +502,9 @@ Rules:
 
     return {
         "groups": groups,
+        "scale": round(scale_y, 2),
+        "vlmImageHeight": vlm_img_h,
+        "realImageHeight": img_h,
         "elapsed": elapsed,
         "pageIndex": body.pageIndex,
         "totalAreas": len(areas),
