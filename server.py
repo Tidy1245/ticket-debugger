@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 
 VLM_URL = "http://192.168.0.37:5070/v1/chat/completions"
 VLM_MODEL = "/MODULE/peter/models/Qwen3-VL-30B-A3B-Instruct"
-VLM_TIMEOUT = 120  # seconds
+VLM_TIMEOUT = 300  # seconds
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -415,19 +415,23 @@ async def vlm_grouping(request: Request, ticket_id: str, body: VLMGroupingReques
         hints.append(f"Additional info: {body.notes}")
     hints_str = "\n".join(hints)
 
-    prompt = f"""Analyze this document image and identify the table data rows.
-Group the data rows into logical groups (e.g., each product/item is one group).
+    # Build targeted prompt
+    context = f"This is a {body.docType}. " if body.docType else "This document has a product/item table. "
+    if body.groupStart and body.groupEnd:
+        context += f"Each group starts with {body.groupStart} and ends with {body.groupEnd}. "
+    elif body.groupStart:
+        context += f"Each group starts with {body.groupStart}. "
+    elif body.groupEnd:
+        context += f"Each group ends with {body.groupEnd}. "
+    if body.columns:
+        context += f"Columns: {body.columns}. "
+    if body.notes:
+        context += f"{body.notes}. "
 
-{hints_str}
-
-Output JSON with your estimated image height and each group's Y-coordinate range:
-{{"image_height": H, "groups": [{{"group": 1, "y_start": N, "y_end": N, "description": "..."}}]}}
-
-Rules:
-1. Each group contains all related data lines for one logical item
-2. y_start and y_end should cover the full vertical range of that group in the image
-3. image_height is the total height of the image as you perceive it
-4. Only output JSON, no other text"""
+    prompt = f"""{context}
+How many product/item groups are in the table? For each group give its vertical position.
+Output JSON: {{"image_height":H,"groups":[{{"group":1,"y_start":N,"y_end":N,"description":"short item description"}}]}}
+Only JSON."""
 
     # Call VLM
     t0 = time.time()
@@ -439,7 +443,7 @@ Rules:
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
                     {"type": "text", "text": prompt},
                 ]}],
-                "max_tokens": 2000,
+                "max_tokens": 1500,
                 "temperature": 0.1,
             })
             resp.raise_for_status()
