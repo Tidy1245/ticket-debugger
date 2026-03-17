@@ -335,7 +335,10 @@ class VLMGroupingRequest(BaseModel):
     pageIndex: int = 0
     docType: str = ""
     columns: str = ""
-    groupPattern: str = ""
+    groupStart: str = ""
+    groupEnd: str = ""
+    notes: str = ""
+    crossPage: bool = False
 
 
 def _get_jpeg_size(path: Path) -> tuple[int, int]:
@@ -404,8 +407,12 @@ async def vlm_grouping(request: Request, ticket_id: str, body: VLMGroupingReques
         hints.append(f"Document type: {body.docType}")
     if body.columns:
         hints.append(f"Table columns: {body.columns}")
-    if body.groupPattern:
-        hints.append(f"Group pattern: {body.groupPattern}")
+    if body.groupStart:
+        hints.append(f"Each group starts with: {body.groupStart}")
+    if body.groupEnd:
+        hints.append(f"Each group ends with: {body.groupEnd}")
+    if body.notes:
+        hints.append(f"Additional info: {body.notes}")
     hints_str = "\n".join(hints)
 
     prompt = f"""Analyze this document image and identify the table data rows.
