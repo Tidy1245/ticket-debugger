@@ -532,6 +532,9 @@
       font-size: 13px;
       line-height: 1.4;
     }
+    .area-item.locatable { cursor: pointer; }
+    .area-item.locatable:hover { border-color: var(--accent-amber); background: rgba(245, 158, 11, 0.08); }
+    .area-item.cell-active { border-color: var(--accent-amber); background: rgba(245, 158, 11, 0.15); }
     .area-item .area-label {
       font-family: 'Fira Code', monospace;
       font-size: 11px;
@@ -1684,7 +1687,10 @@
           filteredAreas.forEach(a => {
             const value = a.text || a.textOCR || '';
             const label = a.name || a.key;
-            html += `<div class="area-item"><span class="area-label">${escHtml(label)}</span><span class="area-value">${escHtml(value)}</span></div>`;
+            const hasLoc = a.regNdx != null && !(a.x === 0 && a.y === 0 && a.w === 1 && a.h === 1) && (a.w > 0 && a.h > 0);
+            const locCls = hasLoc ? ' locatable' : '';
+            const locAttr = hasLoc ? ` data-rx="${a.x}" data-ry="${a.y}" data-rw="${a.w}" data-rh="${a.h}" data-rp="${a.regNdx}" data-rk="${escHtml(label)}" data-rt="${escHtml(value)}"` : '';
+            html += `<div class="area-item${locCls}"${locAttr}><span class="area-label">${escHtml(label)}</span><span class="area-value">${escHtml(value)}</span></div>`;
           });
           html += '</div>';
         }
@@ -1816,11 +1822,11 @@
         });
       });
 
-      // Attach cell locate click listeners
-      document.querySelectorAll('td.locatable').forEach(el => {
+      // Attach cell locate click listeners (table cells + area items)
+      document.querySelectorAll('td.locatable, .area-item.locatable').forEach(el => {
         el.addEventListener('click', () => {
           // Clear previous active
-          document.querySelectorAll('td.cell-active').forEach(c => c.classList.remove('cell-active'));
+          document.querySelectorAll('td.cell-active, .area-item.cell-active').forEach(c => c.classList.remove('cell-active'));
           el.classList.add('cell-active');
           locateCell(
             parseInt(el.dataset.rx), parseInt(el.dataset.ry),

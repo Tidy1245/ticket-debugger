@@ -236,6 +236,11 @@ async def get_ticket(request: Request, ticket_id: str):
                 "textOCR": area.get("textOCR", ""),
                 "confidence": area.get("confidence", []),
                 "confidenceOCR": area.get("confidenceOCR", []),
+                "regNdx": area.get("regNdx"),
+                "x": area.get("x", 0),
+                "y": area.get("y", 0),
+                "w": area.get("w", 0),
+                "h": area.get("h", 0),
             })
         # Extract tableList
         for tbl in integ.get("tableList", []):
