@@ -154,6 +154,38 @@
     .search-toggle:hover { border-color: var(--text-secondary); color: var(--text-secondary); }
     .search-toggle.active { background: rgba(59, 130, 246, 0.2); border-color: var(--accent-blue); color: var(--accent-blue); }
 
+    /* VLM Grouping Panel */
+    .vlm-header { padding: 12px; border-bottom: 1px solid var(--border); }
+    .vlm-btn {
+      width: 100%; padding: 10px 16px; border: none; border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff;
+      font-family: 'Fira Code', monospace; font-size: 13px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all var(--transition); box-shadow: 0 0 12px rgba(124, 58, 237, 0.3);
+    }
+    .vlm-btn:hover { background: linear-gradient(135deg, #8b5cf6, #7c3aed); box-shadow: 0 0 20px rgba(124, 58, 237, 0.5); }
+    .vlm-btn:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+    .vlm-btn svg { width: 16px; height: 16px; }
+    .vlm-hints { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); }
+    .vlm-hint { display: flex; flex-direction: column; gap: 3px; }
+    .vlm-hint label { font-size: 11px; color: var(--text-muted); }
+    .vlm-hint input { font-family: 'Fira Code', monospace; font-size: 11px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); outline: none; }
+    .vlm-hint input:focus { border-color: #7c3aed; }
+    .vlm-results { flex: 1; overflow-y: auto; padding: 12px; }
+    .vlm-loading { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 30px 0; color: var(--text-secondary); }
+    .vlm-loading .spinner { width: 24px; height: 24px; border: 2.5px solid var(--border); border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .vlm-summary { font-size: 13px; color: var(--text-primary); margin-bottom: 10px; font-weight: 600; }
+    .vlm-group {
+      padding: 8px 10px; margin-bottom: 6px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); cursor: pointer; transition: all var(--transition);
+    }
+    .vlm-group:hover { border-color: #7c3aed; background: rgba(124, 58, 237, 0.08); }
+    .vlm-group.active { border-color: #7c3aed; background: rgba(124, 58, 237, 0.15); box-shadow: 0 0 8px rgba(124, 58, 237, 0.2); }
+    .vlm-group-title { font-size: 12px; font-weight: 600; color: #8b5cf6; margin-bottom: 3px; }
+    .vlm-group-desc { font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
+    .vlm-group-meta { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+    .vlm-highlight { position: absolute; border: 2px solid #8b5cf6; background: rgba(139, 92, 246, 0.12); pointer-events: none; z-index: 8; border-radius: 2px; }
+
     /* Main content */
     .main {
       flex: 1;
@@ -1076,8 +1108,9 @@
           </div>
 
           <!-- Table Panel -->
-          <div class="panel" id="panelTable">
+          <div class="panel" id="panelTable" style="flex-direction:row;gap:0;">
             <div id="tableContent" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;"></div>
+            <div id="vlmPanel" style="width:320px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;"></div>
           </div>
         </div>
       </div>
@@ -1149,6 +1182,7 @@
       ocrSearchCurrent = -1;
       tableSearchQuery = '';
       cellHighlightData = null;
+      vlmResult = null; vlmActiveGroup = -1; vlmHighlightAreas = [];
       document.getElementById('ocrSearchInput').value = '';
       document.getElementById('ocrSearchInfo').textContent = '';
       // tableSearchInput is dynamically rendered in renderTable(), no need to clear here
@@ -1168,6 +1202,7 @@
       renderOverview();
       renderPageNav();
       renderTable();
+      renderVLMPanel();
       loadPageImage();
     }
 
@@ -1300,6 +1335,7 @@
 
       renderAreaOverlays();
       renderCellHighlight();
+      renderVLMHighlights();
       updateZoomInfo();
     }
 
@@ -1344,6 +1380,7 @@
           processorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
           renderAreaOverlays(); // re-render with correct scale
           renderCellHighlight(); // re-render cell highlight with correct scale
+          renderVLMHighlights(); // re-render VLM group highlights with correct scale
           // Scroll to active elements after correct scaling
           requestAnimationFrame(() => {
             const cellHl = document.querySelector('.cell-highlight');
@@ -1842,6 +1879,7 @@
 
     async function locateCell(x, y, w, h, pageIdx, key, text) {
       cellHighlightData = { x, y, w, h, key, text };
+      vlmHighlightAreas = []; vlmActiveGroup = -1;
 
       // Auto-enable Table-Image Position toggle
       document.getElementById('tableImgPos').checked = true;
@@ -1925,6 +1963,175 @@
       const d = document.createElement('div');
       d.textContent = s;
       return d.innerHTML;
+    }
+
+    // --- VLM Grouping ---
+    let vlmResult = null;
+    let vlmLoading = false;
+    let vlmTimerInterval = null;
+    let vlmActiveGroup = -1;
+    let vlmHighlightAreas = []; // areas to highlight on image
+
+    function renderVLMPanel() {
+      const panel = document.getElementById('vlmPanel');
+      if (!panel || !ticketData) { if (panel) panel.innerHTML = ''; return; }
+
+      let html = '<div class="vlm-header">';
+      html += `<button class="vlm-btn" id="vlmRunBtn" ${vlmLoading ? 'disabled' : ''}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+        VLM Grouping
+      </button></div>`;
+
+      html += '<div class="vlm-hints">';
+      html += '<div class="vlm-hint"><label>Document type (optional)</label><input type="text" id="vlmDocType" placeholder="e.g. Invoice, Bill of Lading"></div>';
+      html += '<div class="vlm-hint"><label>Column names (optional)</label><input type="text" id="vlmColumns" placeholder="e.g. Item, Desc, Qty, Price"></div>';
+      html += '<div class="vlm-hint"><label>Group start/end pattern (optional)</label><input type="text" id="vlmPattern" placeholder="e.g. starts with item number"></div>';
+      html += '</div>';
+
+      html += '<div class="vlm-results" id="vlmResults">';
+      if (vlmLoading) {
+        html += '<div class="vlm-loading"><div class="spinner"></div><span id="vlmTimer">0.0s</span><span>Analyzing with VLM...</span></div>';
+      } else if (vlmResult) {
+        const groups = vlmResult.groups || [];
+        html += `<div class="vlm-summary">${groups.length} groups found <span style="font-weight:400;color:var(--text-muted);">(${vlmResult.assignedAreas}/${vlmResult.totalAreas} areas, ${vlmResult.elapsed}s)</span></div>`;
+        groups.forEach((g, i) => {
+          html += `<div class="vlm-group ${vlmActiveGroup === i ? 'active' : ''}" data-gi="${i}">
+            <div class="vlm-group-title">Group ${i + 1}</div>
+            <div class="vlm-group-desc">${escHtml(g.description || '')}</div>
+            <div class="vlm-group-meta">${g.areas.length} areas · y: ${g.y_start}–${g.y_end}</div>
+          </div>`;
+        });
+      } else {
+        html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px;">Click "VLM Grouping" to analyze</p>';
+      }
+      html += '</div>';
+
+      panel.innerHTML = html;
+
+      // Attach listeners
+      const runBtn = document.getElementById('vlmRunBtn');
+      if (runBtn) runBtn.addEventListener('click', startVLMGrouping);
+
+      document.querySelectorAll('.vlm-group').forEach(el => {
+        el.addEventListener('click', () => activateVLMGroup(parseInt(el.dataset.gi)));
+      });
+    }
+
+    async function startVLMGrouping() {
+      if (vlmLoading || !currentTicket) return;
+      vlmLoading = true;
+      vlmResult = null;
+      vlmActiveGroup = -1;
+      vlmHighlightAreas = [];
+      renderVLMPanel();
+
+      // Start timer
+      const t0 = performance.now();
+      vlmTimerInterval = setInterval(() => {
+        const el = document.getElementById('vlmTimer');
+        if (el) el.textContent = ((performance.now() - t0) / 1000).toFixed(1) + 's';
+      }, 100);
+
+      try {
+        const body = {
+          pageIndex: currentPageIndex,
+          docType: document.getElementById('vlmDocType')?.value || '',
+          columns: document.getElementById('vlmColumns')?.value || '',
+          groupPattern: document.getElementById('vlmPattern')?.value || '',
+        };
+        const res = await fetch(`/api/tickets/${currentTicket}/vlm-grouping`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        vlmResult = await res.json();
+      } catch (e) {
+        alert('VLM Grouping failed: ' + e.message);
+      } finally {
+        vlmLoading = false;
+        clearInterval(vlmTimerInterval);
+        renderVLMPanel();
+      }
+    }
+
+    function activateVLMGroup(groupIndex) {
+      if (!vlmResult || !vlmResult.groups[groupIndex]) return;
+      vlmActiveGroup = groupIndex;
+      const group = vlmResult.groups[groupIndex];
+      vlmHighlightAreas = group.areas;
+
+      // Clear cell highlight
+      cellHighlightData = null;
+
+      // Enable Table-Image Position
+      document.getElementById('tableImgPos').checked = true;
+
+      // Update VLM panel active state
+      document.querySelectorAll('.vlm-group').forEach((el, i) => {
+        el.classList.toggle('active', i === groupIndex);
+      });
+
+      // Switch to Images tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('.tab[data-tab="images"]').classList.add('active');
+      document.getElementById('panelImages').classList.add('active');
+
+      // Navigate to page if needed
+      const pageIdx = vlmResult.pageIndex;
+      if (pageIdx !== currentPageIndex) {
+        currentPageIndex = pageIdx;
+        renderPageNav();
+        loadPageImage();
+      } else {
+        renderAreaOverlays();
+        renderCellHighlight();
+        renderVLMHighlights();
+      }
+      requestAnimationFrame(() => scrollToVLMHighlights());
+    }
+
+    function renderVLMHighlights() {
+      const container = document.getElementById('imageContainer');
+      container.querySelectorAll('.vlm-highlight').forEach(el => el.remove());
+      if (!vlmHighlightAreas.length) return;
+
+      const img = document.getElementById('pageImg');
+      if (!img || !img.naturalWidth) return;
+      const vw = imageViewport.clientWidth;
+      const vh = imageViewport.clientHeight;
+      const scaledW = img.naturalWidth * zoomLevel;
+      const scaledH = img.naturalHeight * zoomLevel;
+      const padX = Math.max(0, (vw - scaledW) / 2);
+      const padY = Math.max(0, (vh - scaledH) / 2);
+
+      let scaleX = 1, scaleY = 1;
+      if (processorImgSize) {
+        scaleX = img.naturalWidth / processorImgSize.w;
+        scaleY = img.naturalHeight / processorImgSize.h;
+      }
+
+      vlmHighlightAreas.forEach(area => {
+        const div = document.createElement('div');
+        div.className = 'vlm-highlight';
+        div.style.left = (padX + area.x * scaleX * zoomLevel) + 'px';
+        div.style.top = (padY + area.y * scaleY * zoomLevel) + 'px';
+        div.style.width = (area.w * scaleX * zoomLevel) + 'px';
+        div.style.height = (area.h * scaleY * zoomLevel) + 'px';
+        container.appendChild(div);
+      });
+    }
+
+    function scrollToVLMHighlights() {
+      const hl = document.querySelector('.vlm-highlight');
+      if (!hl) return;
+      const left = parseInt(hl.style.left) - imageViewport.clientWidth / 2 + parseInt(hl.style.width) / 2;
+      const top = parseInt(hl.style.top) - imageViewport.clientHeight / 2 + parseInt(hl.style.height) / 2;
+      imageViewport.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: 'smooth' });
     }
 
     // Table search
@@ -2205,6 +2412,7 @@
           renderOverview();
           renderPageNav();
           renderTable();
+          renderVLMPanel();
           loadPageImage();
         }
       } else {

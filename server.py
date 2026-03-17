@@ -1,15 +1,23 @@
 """Ticket Debugger - FastAPI Backend Server (IP-isolated uploads)"""
 
 import asyncio
+import base64
 import json
 import shutil
+import struct
 import time
 from pathlib import Path
 from typing import List
 
+import httpx
+from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+
+VLM_URL = "http://192.168.0.37:5070/v1/chat/completions"
+VLM_MODEL = "/MODULE/peter/models/Qwen3-VL-30B-A3B-Instruct"
+VLM_TIMEOUT = 120  # seconds
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -321,6 +329,171 @@ async def get_image(request: Request, ticket_id: str, filename: str):
     if not file_path.exists():
         raise HTTPException(404, "Image not found")
     return FileResponse(file_path, media_type="image/jpeg")
+
+
+class VLMGroupingRequest(BaseModel):
+    pageIndex: int = 0
+    docType: str = ""
+    columns: str = ""
+    groupPattern: str = ""
+
+
+def _get_jpeg_size(path: Path) -> tuple[int, int]:
+    """Get image dimensions without PIL."""
+    with open(path, "rb") as f:
+        data = f.read()
+    # Try JPEG
+    if data[:2] == b'\xff\xd8':
+        i = 2
+        while i < len(data) - 1:
+            if data[i] != 0xFF:
+                break
+            marker = data[i + 1]
+            if marker == 0xC0 or marker == 0xC2:  # SOF0 or SOF2
+                h = struct.unpack(">H", data[i + 5:i + 7])[0]
+                w = struct.unpack(">H", data[i + 7:i + 9])[0]
+                return w, h
+            length = struct.unpack(">H", data[i + 2:i + 4])[0]
+            i += 2 + length
+    # Try PNG
+    if data[:8] == b'\x89PNG\r\n\x1a\n':
+        w = struct.unpack(">I", data[16:20])[0]
+        h = struct.unpack(">I", data[20:24])[0]
+        return w, h
+    return 0, 0
+
+
+@app.post("/api/tickets/{ticket_id}/vlm-grouping")
+async def vlm_grouping(request: Request, ticket_id: str, body: VLMGroupingRequest):
+    """Run VLM-based table row grouping on a ticket page."""
+    ip = get_ip(request)
+    touch_ip(ip)
+    config_path = ip_dir(ip) / ticket_id / "config.json"
+    if not config_path.exists():
+        raise HTTPException(404, "Ticket not found")
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    reg_list = data.get("regList", [])
+    if body.pageIndex < 0 or body.pageIndex >= len(reg_list):
+        raise HTTPException(404, "Page not found")
+
+    reg = reg_list[body.pageIndex]
+    # Use processor image (inputList) - OCR coords are based on it
+    img_filename = reg.get("inputList", [{}])[0].get("path")
+    if not img_filename:
+        raise HTTPException(400, "No image for this page")
+
+    ticket_dir = ip_dir(ip) / ticket_id
+    img_path = ticket_dir / img_filename
+    if not img_path.exists():
+        raise HTTPException(404, "Image file not found")
+
+    # Read image + get dimensions
+    img_data = img_path.read_bytes()
+    img_b64 = base64.b64encode(img_data).decode()
+    img_w, img_h = _get_jpeg_size(img_path)
+
+    # Get OCR areas
+    areas = reg.get("analyzer", {}).get("areaList", [])
+
+    # Build prompt
+    hints = []
+    if body.docType:
+        hints.append(f"Document type: {body.docType}")
+    if body.columns:
+        hints.append(f"Table columns: {body.columns}")
+    if body.groupPattern:
+        hints.append(f"Group pattern: {body.groupPattern}")
+    hints_str = "\n".join(hints)
+
+    prompt = f"""Analyze this document image and identify the table data rows.
+Group the data rows into logical groups (e.g., each product/item is one group).
+
+{hints_str}
+
+Image size: {img_w} x {img_h} pixels. Coordinates: top-left is (0,0), Y increases downward.
+
+Output JSON array with each group's Y-coordinate range (in actual pixel coordinates):
+[{{"group": 1, "y_start": N, "y_end": N, "description": "..."}}]
+
+Rules:
+1. Each group contains all related data lines for one logical item
+2. y_start and y_end should cover the full vertical range of that group
+3. Use actual pixel coordinates matching the image dimensions ({img_w}x{img_h})
+4. Only output JSON array, no other text"""
+
+    # Call VLM
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
+            resp = await client.post(VLM_URL, json={
+                "model": VLM_MODEL,
+                "messages": [{"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                    {"type": "text", "text": prompt},
+                ]}],
+                "max_tokens": 2000,
+                "temperature": 0.1,
+            })
+            resp.raise_for_status()
+    except httpx.TimeoutException:
+        raise HTTPException(504, "VLM request timed out")
+    except Exception as e:
+        raise HTTPException(502, f"VLM request failed: {str(e)}")
+
+    elapsed = round(time.time() - t0, 1)
+    content = resp.json()["choices"][0]["message"]["content"]
+
+    # Parse JSON from response
+    try:
+        js = content
+        if "```json" in content:
+            js = content.split("```json")[1].split("```")[0]
+        elif "```" in content:
+            js = content.split("```")[1].split("```")[0]
+        vlm_groups = json.loads(js.strip())
+        if isinstance(vlm_groups, dict):
+            vlm_groups = vlm_groups.get("groups", vlm_groups.get("tables", []))
+    except (json.JSONDecodeError, IndexError):
+        raise HTTPException(500, f"Failed to parse VLM response: {content[:500]}")
+
+    # Match OCR areas to groups by Y-coordinate
+    groups = []
+    assigned = set()
+    for g in vlm_groups:
+        y1 = g.get("y_start", 0)
+        y2 = g.get("y_end", 0)
+        desc = g.get("description", "")
+        matched_areas = []
+        for i, area in enumerate(areas):
+            cy = area.get("y", 0) + area.get("h", 0) / 2
+            if y1 <= cy <= y2 and i not in assigned:
+                assigned.add(i)
+                matched_areas.append({
+                    "areaId": i,
+                    "text": area.get("text", ""),
+                    "x": area.get("x", 0),
+                    "y": area.get("y", 0),
+                    "w": area.get("w", 0),
+                    "h": area.get("h", 0),
+                })
+        groups.append({
+            "index": len(groups),
+            "y_start": y1,
+            "y_end": y2,
+            "description": desc,
+            "areas": matched_areas,
+        })
+
+    return {
+        "groups": groups,
+        "elapsed": elapsed,
+        "pageIndex": body.pageIndex,
+        "totalAreas": len(areas),
+        "assignedAreas": len(assigned),
+    }
 
 
 if __name__ == "__main__":
