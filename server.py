@@ -333,6 +333,7 @@ async def get_image(request: Request, ticket_id: str, filename: str):
 
 class VLMGroupingRequest(BaseModel):
     pageIndex: int = 0
+    pages: list[int] = []  # multiple pages to analyze
     docType: str = ""
     columns: str = ""
     groupStart: str = ""
@@ -379,43 +380,15 @@ async def vlm_grouping(request: Request, ticket_id: str, body: VLMGroupingReques
         data = json.load(f)
 
     reg_list = data.get("regList", [])
-    if body.pageIndex < 0 or body.pageIndex >= len(reg_list):
-        raise HTTPException(404, "Page not found")
-
-    reg = reg_list[body.pageIndex]
-    # Use processor image (inputList) - OCR coords are based on it
-    img_filename = reg.get("inputList", [{}])[0].get("path")
-    if not img_filename:
-        raise HTTPException(400, "No image for this page")
-
     ticket_dir = ip_dir(ip) / ticket_id
-    img_path = ticket_dir / img_filename
-    if not img_path.exists():
-        raise HTTPException(404, "Image file not found")
 
-    # Read image + get dimensions
-    img_data = img_path.read_bytes()
-    img_b64 = base64.b64encode(img_data).decode()
-    img_w, img_h = _get_jpeg_size(img_path)
+    # Determine pages to process
+    page_indices = body.pages if body.pages else [body.pageIndex]
+    for pi in page_indices:
+        if pi < 0 or pi >= len(reg_list):
+            raise HTTPException(404, f"Page {pi} not found")
 
-    # Get OCR areas
-    areas = reg.get("analyzer", {}).get("areaList", [])
-
-    # Build prompt
-    hints = []
-    if body.docType:
-        hints.append(f"Document type: {body.docType}")
-    if body.columns:
-        hints.append(f"Table columns: {body.columns}")
-    if body.groupStart:
-        hints.append(f"Each group starts with: {body.groupStart}")
-    if body.groupEnd:
-        hints.append(f"Each group ends with: {body.groupEnd}")
-    if body.notes:
-        hints.append(f"Additional info: {body.notes}")
-    hints_str = "\n".join(hints)
-
-    # Build targeted prompt
+    # Build prompt context from hints
     context = f"This is a {body.docType}. " if body.docType else "This document has a product/item table. "
     if body.groupStart and body.groupEnd:
         context += f"Each group starts with {body.groupStart} and ends with {body.groupEnd}. "
@@ -428,91 +401,126 @@ async def vlm_grouping(request: Request, ticket_id: str, body: VLMGroupingReques
     if body.notes:
         context += f"{body.notes}. "
 
-    prompt = f"""{context}
+    prompt_template = f"""{context}
 How many product/item groups are in the table? For each group give its vertical position.
 Output JSON: {{"image_height":H,"groups":[{{"group":1,"y_start":N,"y_end":N,"description":"short item description"}}]}}
 Only JSON."""
 
-    # Call VLM
+    # Process each page
     t0 = time.time()
-    try:
-        async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
-            resp = await client.post(VLM_URL, json={
-                "model": VLM_MODEL,
-                "messages": [{"role": "user", "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
-                    {"type": "text", "text": prompt},
-                ]}],
-                "max_tokens": 1500,
-                "temperature": 0.1,
-            })
-            resp.raise_for_status()
-    except httpx.TimeoutException:
-        raise HTTPException(504, "VLM request timed out")
-    except Exception as e:
-        raise HTTPException(502, f"VLM request failed: {str(e)}")
+    all_groups = []
+    total_areas = 0
+    total_assigned = 0
+
+    async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
+        for pi in page_indices:
+            reg = reg_list[pi]
+            img_filename = reg.get("inputList", [{}])[0].get("path")
+            if not img_filename:
+                continue
+            img_path = ticket_dir / img_filename
+            if not img_path.exists():
+                continue
+
+            img_data = img_path.read_bytes()
+            img_b64 = base64.b64encode(img_data).decode()
+            _, img_h = _get_jpeg_size(img_path)
+            areas = reg.get("analyzer", {}).get("areaList", [])
+            total_areas += len(areas)
+
+            # Call VLM
+            try:
+                resp = await client.post(VLM_URL, json={
+                    "model": VLM_MODEL,
+                    "messages": [{"role": "user", "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                        {"type": "text", "text": prompt_template},
+                    ]}],
+                    "max_tokens": 1500,
+                    "temperature": 0.1,
+                })
+                resp.raise_for_status()
+            except httpx.TimeoutException:
+                raise HTTPException(504, f"VLM request timed out on page {pi + 1}")
+            except Exception as e:
+                raise HTTPException(502, f"VLM request failed on page {pi + 1}: {str(e)}")
+
+            content = resp.json()["choices"][0]["message"]["content"]
+
+            # Parse JSON
+            try:
+                js = content
+                if "```json" in content:
+                    js = content.split("```json")[1].split("```")[0]
+                elif "```" in content:
+                    js = content.split("```")[1].split("```")[0]
+                parsed = json.loads(js.strip())
+                if isinstance(parsed, list):
+                    vlm_groups = parsed
+                    vlm_img_h = 0
+                else:
+                    vlm_groups = parsed.get("groups", parsed.get("tables", []))
+                    vlm_img_h = parsed.get("image_height", 0)
+            except (json.JSONDecodeError, IndexError):
+                continue  # Skip page on parse failure
+
+            # Scale VLM coordinates
+            scale_y = img_h / vlm_img_h if vlm_img_h and img_h else 1.0
+
+            # Build scaled group boundaries
+            scaled_groups = []
+            for g in vlm_groups:
+                y1 = g.get("y_start", 0) * scale_y
+                y2 = g.get("y_end", 0) * scale_y
+                scaled_groups.append({"y1": y1, "y2": y2, "mid": (y1 + y2) / 2, "desc": g.get("description", "")})
+
+            if not scaled_groups:
+                continue
+
+            # Match OCR areas to NEAREST group by midpoint
+            group_areas: dict[int, list] = {i: [] for i in range(len(scaled_groups))}
+            assigned = set()
+            overall_y1 = scaled_groups[0]["y1"]
+            overall_y2 = scaled_groups[-1]["y2"]
+            margin = (overall_y2 - overall_y1) * 0.05
+
+            for i, area in enumerate(areas):
+                if not area.get("text", "").strip():
+                    continue
+                cy = area.get("y", 0) + area.get("h", 0) / 2
+                if cy < (overall_y1 - margin) or cy > (overall_y2 + margin):
+                    continue
+                best_gi, best_dist = -1, float("inf")
+                for gi, sg in enumerate(scaled_groups):
+                    dist = abs(cy - sg["mid"])
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_gi = gi
+                if best_gi >= 0:
+                    assigned.add(i)
+                    group_areas[best_gi].append({
+                        "areaId": i, "text": area.get("text", ""),
+                        "x": area.get("x", 0), "y": area.get("y", 0),
+                        "w": area.get("w", 0), "h": area.get("h", 0),
+                    })
+
+            total_assigned += len(assigned)
+            for gi, sg in enumerate(scaled_groups):
+                all_groups.append({
+                    "index": len(all_groups),
+                    "pageIndex": pi,
+                    "y_start": sg["y1"], "y_end": sg["y2"],
+                    "description": sg["desc"],
+                    "areas": group_areas[gi],
+                })
 
     elapsed = round(time.time() - t0, 1)
-    content = resp.json()["choices"][0]["message"]["content"]
-
-    # Parse JSON from response
-    try:
-        js = content
-        if "```json" in content:
-            js = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            js = content.split("```")[1].split("```")[0]
-        parsed = json.loads(js.strip())
-        if isinstance(parsed, list):
-            vlm_groups = parsed
-            vlm_img_h = 0
-        else:
-            vlm_groups = parsed.get("groups", parsed.get("tables", []))
-            vlm_img_h = parsed.get("image_height", 0)
-    except (json.JSONDecodeError, IndexError):
-        raise HTTPException(500, f"Failed to parse VLM response: {content[:500]}")
-
-    # Scale VLM coordinates to real image coordinates
-    scale_y = img_h / vlm_img_h if vlm_img_h and img_h else 1.0
-
-    # Match OCR areas to groups by Y-coordinate
-    groups = []
-    assigned = set()
-    for g in vlm_groups:
-        y1 = g.get("y_start", 0) * scale_y
-        y2 = g.get("y_end", 0) * scale_y
-        margin = (y2 - y1) * 0.1  # 10% margin for tolerance
-        desc = g.get("description", "")
-        matched_areas = []
-        for i, area in enumerate(areas):
-            cy = area.get("y", 0) + area.get("h", 0) / 2
-            if (y1 - margin) <= cy <= (y2 + margin) and i not in assigned:
-                assigned.add(i)
-                matched_areas.append({
-                    "areaId": i,
-                    "text": area.get("text", ""),
-                    "x": area.get("x", 0),
-                    "y": area.get("y", 0),
-                    "w": area.get("w", 0),
-                    "h": area.get("h", 0),
-                })
-        groups.append({
-            "index": len(groups),
-            "y_start": y1,
-            "y_end": y2,
-            "description": desc,
-            "areas": matched_areas,
-        })
-
     return {
-        "groups": groups,
-        "scale": round(scale_y, 2),
-        "vlmImageHeight": vlm_img_h,
-        "realImageHeight": img_h,
+        "groups": all_groups,
         "elapsed": elapsed,
-        "pageIndex": body.pageIndex,
-        "totalAreas": len(areas),
-        "assignedAreas": len(assigned),
+        "pages": page_indices,
+        "totalAreas": total_areas,
+        "assignedAreas": total_assigned,
     }
 
 

@@ -2155,8 +2155,7 @@
       }, 100);
 
       try {
-        const pageIndex = selectedPages.length ? selectedPages[0] : 0;
-        const body = { pageIndex, docType, columns, groupStart, groupEnd, notes, crossPage };
+        const body = { pages: selectedPages, docType, columns, groupStart, groupEnd, notes, crossPage };
         const res = await fetch(`/api/tickets/${currentTicket}/vlm-grouping`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2190,7 +2189,7 @@
       document.querySelector('.tab[data-tab="images"]').classList.add('active');
       document.getElementById('panelImages').classList.add('active');
 
-      const pageIdx = vlmResult.pageIndex;
+      const pageIdx = group.pageIndex != null ? group.pageIndex : 0;
       if (pageIdx !== currentPageIndex) {
         currentPageIndex = pageIdx;
         renderPageNav();
