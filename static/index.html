@@ -219,12 +219,12 @@
     .check-row-vlm { color: #86efac; border-bottom: 2px solid var(--border) !important; }
     .check-diff-highlight { background: rgba(239, 68, 68, 0.35); border-radius: 2px; padding: 0 1px; color: var(--accent-red); }
     .check-diff-vlm { background: rgba(134, 239, 172, 0.2); border-radius: 2px; padding: 0 1px; }
-    .check-missing-cell { background: rgba(245, 158, 11, 0.1); }
+    .check-missing-cell { background: rgba(136, 136, 168, 0.1); }
     .check-summary { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
     .check-stat { font-size: 12px; font-family: 'Fira Code', monospace; padding: 4px 10px; border-radius: 4px; }
     .check-stat-correct { background: rgba(16, 185, 129, 0.12); color: var(--accent-green); }
     .check-stat-wrong { background: rgba(239, 68, 68, 0.12); color: var(--accent-red); }
-    .check-stat-missing { background: rgba(245, 158, 11, 0.12); color: var(--accent-amber); }
+    .check-stat-missing { background: rgba(136, 136, 168, 0.12); color: var(--text-muted); }
     .vlm-editable { min-width: 40px; }
 
     /* Table-Image Position mode selector */
@@ -2731,29 +2731,39 @@
 
         cr.results.forEach(rowResult => {
           const ri = rowResult.row;
-          html += `<tr><td style="color:var(--text-muted);" rowspan="2">${ri}</td>`;
-          rowResult.cells.forEach(c => {
-            if (c.status === 'match') {
+          const hasDiff = rowResult.cells.some(c => c.status !== 'match');
+          if (!hasDiff) {
+            // All match: single row, only show pipeline values
+            html += `<tr><td style="color:var(--text-muted);">${ri}</td>`;
+            rowResult.cells.forEach(c => {
               html += `<td class="check-row-pipeline">${escHtml(c.pVal)}</td>`;
-            } else if (c.status === 'missing') {
-              html += `<td class="check-row-pipeline" style="color:var(--text-muted);font-style:italic;">（空）</td>`;
-            } else {
-              const diffHtml = renderDiffHtml(c.normA, c.aMatch, 'check-diff-highlight');
-              html += `<td class="check-row-pipeline">${diffHtml}</td>`;
-            }
-          });
-          html += '</tr><tr>';
-          rowResult.cells.forEach(c => {
-            if (c.status === 'match') {
-              html += `<td class="check-row-vlm">${escHtml(c.vVal)}</td>`;
-            } else if (c.status === 'missing') {
-              html += `<td class="check-missing-cell" style="color:var(--accent-amber);">${escHtml(c.vlmVal || c.vVal)}</td>`;
-            } else {
-              const diffHtml = renderDiffHtml(c.normB, c.bMatch, 'check-diff-vlm');
-              html += `<td class="check-row-vlm">${diffHtml}</td>`;
-            }
-          });
-          html += '</tr>';
+            });
+            html += '</tr>';
+          } else {
+            // Has diff: double row, but only show diff columns' VLM answer
+            html += `<tr><td style="color:var(--text-muted);" rowspan="2">${ri}</td>`;
+            rowResult.cells.forEach(c => {
+              if (c.status === 'match') {
+                html += `<td class="check-row-pipeline" rowspan="2">${escHtml(c.pVal)}</td>`;
+              } else if (c.status === 'missing') {
+                html += `<td class="check-row-pipeline" style="color:var(--text-muted);font-style:italic;">（空）</td>`;
+              } else {
+                const diffHtml = renderDiffHtml(c.normA, c.aMatch, 'check-diff-highlight');
+                html += `<td class="check-row-pipeline">${diffHtml}</td>`;
+              }
+            });
+            html += '</tr><tr>';
+            rowResult.cells.forEach(c => {
+              if (c.status === 'match') return; // already rowspan=2
+              if (c.status === 'missing') {
+                html += `<td class="check-missing-cell" style="color:var(--text-muted);">${escHtml(c.vlmVal || c.vVal)}</td>`;
+              } else {
+                const diffHtml = renderDiffHtml(c.normB, c.bMatch, 'check-diff-vlm');
+                html += `<td class="check-row-vlm">${diffHtml}</td>`;
+              }
+            });
+            html += '</tr>';
+          }
         });
 
         html += '</tbody></table></div>';
@@ -2791,11 +2801,13 @@
         const rules = document.getElementById('checkRules')?.value || '';
         const cols = document.getElementById('checkColumns')?.value || '';
         try {
-          await fetch('/api/check-presets', {
+          const res = await fetch('/api/check-presets', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, formatRules: rules, columns: cols, keywords: [], skipColumns: [] }),
           });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           await loadCheckPresets();
+          alert(`Preset「${name}」已儲存`);
           renderCheckPanel();
         } catch (e) { alert('儲存失敗: ' + e.message); }
       });
@@ -2808,8 +2820,10 @@
         if (!checkPresets.custom[name]) { alert('找不到此自訂 Preset'); return; }
         if (!confirm(`確定刪除自訂 Preset「${name}」？`)) return;
         try {
-          await fetch(`/api/check-presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+          const res = await fetch(`/api/check-presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           await loadCheckPresets();
+          alert(`Preset「${name}」已刪除`);
           renderCheckPanel();
         } catch (e) { alert('刪除失敗: ' + e.message); }
       });
@@ -2839,30 +2853,36 @@
           const col = td.dataset.col;
           if (vlmAnswers.rows[ri]) vlmAnswers.rows[ri][col] = td.textContent;
         });
-        // If name changed, delete old one
         const oldName = vlmAnswers.name;
         vlmAnswers.name = newName;
         try {
-          await fetch(`/api/vlm-answers/${encodeURIComponent(newName)}`, {
+          const res = await fetch(`/api/vlm-answers/${encodeURIComponent(newName)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(vlmAnswers),
           });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           if (oldName && oldName !== newName) {
             await fetch(`/api/vlm-answers/${encodeURIComponent(oldName)}`, { method: 'DELETE' }).catch(() => {});
           }
           await loadVlmAnswersList();
+          alert(`答案「${newName}」已儲存`);
           renderCheckPanel();
         } catch (e) { alert('儲存失敗: ' + e.message); }
       });
 
       // VLM answer delete
       document.getElementById('vlmDeleteBtn')?.addEventListener('click', async () => {
-        if (!vlmAnswers?.name || !confirm(`確定刪除答案「${vlmAnswers.name}」？`)) return;
+        if (!vlmAnswers) return;
+        const name = vlmAnswers.name;
+        if (!name) { alert('答案沒有名稱，無法刪除'); return; }
+        if (!confirm(`確定刪除答案「${name}」？`)) return;
         try {
-          await fetch(`/api/vlm-answers/${encodeURIComponent(vlmAnswers.name)}`, { method: 'DELETE' });
+          const res = await fetch(`/api/vlm-answers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           vlmAnswers = null;
           checkCompareResult = null;
           await loadVlmAnswersList();
+          alert(`答案「${name}」已刪除`);
           renderCheckPanel();
         } catch (e) { alert('刪除失敗: ' + e.message); }
       });
