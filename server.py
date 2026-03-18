@@ -381,6 +381,7 @@ def _get_jpeg_size(path: Path) -> tuple[int, int]:
 CHECK_PRESETS = {
     'BVLGARI': {
         'keywords': [['Tva', 'Code'], ['Country of origin:'], ['Commodity code:']],
+        'skipColumns': ['Item_No'],
         'formatRules': """BVLGARI Import Invoice:
 - Item1 (Code): digits under "Code" column. Ignore "Cde. xxxx Po No. Delivery xxxx".
 - Item2 (Description): text with underscores below Item1, to before "Serial number" or "Commodity code". Multi-line.
@@ -395,6 +396,7 @@ CHECK_PRESETS = {
     },
     'LVMH': {
         'keywords': [['Reference', 'Description'], ['Country of origin'], ['Serial']],
+        'skipColumns': ['Item_No'],
         'formatRules': """LVMH Watch & Jewellery Import Invoice:
 - Item1 (Reference): alphanumeric reference code (e.g. AB1234-567)
 - Item2 (Description): product description text. Multi-line.
@@ -409,6 +411,7 @@ CHECK_PRESETS = {
     },
     'BOUCHERON': {
         'keywords': [['Code', 'Description'], ['Lot Number'], ['Origin']],
+        'skipColumns': ['Item_No'],
         'formatRules': """BOUCHERON Import Invoice:
 - Item1 (Code): product code (letters + digits, e.g. JCO123)
 - Item2 (Description): product description. Multi-line.
@@ -423,6 +426,7 @@ CHECK_PRESETS = {
     },
     'LV': {
         'keywords': [['MADE IN'], ['Item Code'], ['Reference']],
+        'skipColumns': ['Item_No'],
         'formatRules': """Louis Vuitton Import Invoice:
 - Item1 (Item Code): 6-character alphanumeric code
 - Item2 (Reference): reference code
@@ -475,8 +479,11 @@ def concat_images_b64(paths: list[Path]) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def build_check_prompt(format_rules: str, columns: str, rows_text: str) -> str:
+def build_check_prompt(format_rules: str, columns: str, rows_text: str, skip_columns: list[str] | None = None) -> str:
     """Build the VLM check-answer prompt."""
+    skip_note = ""
+    if skip_columns:
+        skip_note = f"\n- SKIP these columns (auto-generated, do NOT verify): {', '.join(skip_columns)}"
     return f"""You are verifying OCR pipeline output against the original document image.
 
 Format rules for this document type:
@@ -487,14 +494,19 @@ Columns: {columns}
 The OCR pipeline extracted these rows:
 {rows_text}
 
-Compare the pipeline output with what you see in the image. For each row, check every field.
-Output JSON array. For each row:
-{{"row": ROW_INDEX, "fields": [{{"col": "COLUMN_NAME", "status": "CORRECT|WRONG|MISSING", "expected": "correct value if WRONG or MISSING"}}]}}
+Compare ONLY the pipeline values against what you actually see in the document image.
 
-Rules:
-- Only include fields that are WRONG or MISSING. Omit CORRECT fields.
-- ROW_INDEX is 0-based.
-- If a row is entirely correct, include it with empty fields array.
+Output JSON array. For each row:
+{{"row": ROW_INDEX, "fields": [{{"col": "COLUMN_NAME", "status": "WRONG|MISSING", "expected": "correct value"}}]}}
+
+IMPORTANT rules:
+- ONLY report fields that are genuinely WRONG or MISSING. Omit correct fields.
+- A field is CORRECT if the pipeline value matches the image value in meaning, even if formatting differs slightly (e.g. extra spaces, "1,234.00" vs "1234.00", trailing zeros, comma vs period in thousands).
+- A field is WRONG only if the actual content/digits/letters are different from what the image shows.
+- A field is MISSING only if the image clearly shows a value but the pipeline has it empty.
+- ROW_INDEX must match the exact "Row N" index from the pipeline output above.
+- If a row is entirely correct, include it with empty fields array: {{"row": N, "fields": []}}
+- Do NOT invent values. Only report what you can clearly read from the image.{skip_note}
 - Output ONLY the JSON array, no other text."""
 
 
@@ -524,6 +536,7 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
     format_rules = body.customRules or preset_cfg.get('formatRules', '')
     columns = body.columns or preset_cfg.get('columns', '')
     keywords = preset_cfg.get('keywords', [])
+    skip_columns = preset_cfg.get('skipColumns', [])
 
     if not format_rules or not columns:
         raise HTTPException(400, "Format rules and columns are required")
@@ -588,7 +601,7 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
 
     async def event_stream():
         t0 = time.time()
-        yield f"data: {json.dumps({'event': 'init', 'totalPairs': len(pairs), 'tablePages': table_pages, 'totalRows': len(table_rows)})}\n\n"
+        yield f"data: {json.dumps({'event': 'init', 'totalPairs': len(pairs), 'tablePages': table_pages, 'totalRows': len(table_rows), 'skipColumns': skip_columns})}\n\n"
 
         all_results = []
 
@@ -634,12 +647,13 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
                     yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairResults': []})}\n\n"
                     continue
 
-                # Build rows text
+                # Build rows text (exclude skip columns)
                 col_list = [c.strip() for c in columns.split(",")]
+                check_cols = [c for c in col_list if c not in skip_columns]
                 rows_text = ""
                 for i, row in enumerate(pair_rows):
                     vals = []
-                    for c in col_list:
+                    for c in check_cols:
                         # Try exact key match, then case-insensitive
                         val = row.get(c, "")
                         if not val:
@@ -651,7 +665,7 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
                     rows_text += f"Row {pair_row_indices[i]}: {', '.join(vals)}\n"
 
                 # Build prompt
-                prompt = build_check_prompt(format_rules, columns, rows_text)
+                prompt = build_check_prompt(format_rules, columns, rows_text, skip_columns)
 
                 # Call VLM
                 try:

@@ -1248,7 +1248,7 @@
       tableSearchQuery = '';
       cellHighlightData = null;
       vlmResult = null; vlmActiveGroup = -1; vlmHighlightAreas = [];
-      checkResult = null; checkLoading = false; checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
+      checkResult = null; checkLoading = false; checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 }; checkSkipColumns = [];
       document.getElementById('ocrSearchInput').value = '';
       document.getElementById('ocrSearchInfo').textContent = '';
       // tableSearchInput is dynamically rendered in renderTable(), no need to clear here
@@ -2508,6 +2508,7 @@
     let checkResult = null;
     let checkLoading = false;
     let checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
+    let checkSkipColumns = [];
 
     const CHECK_PRESETS = {
       '': { formatRules: '', columns: '' },
@@ -2641,7 +2642,9 @@
               const info = fieldMap[key];
               const cell = row[col] || {};
               const text = cell.textModify || cell.text || '';
-              if (info) {
+              if (checkSkipColumns.includes(col)) {
+                html += `<td class="status-unchecked" title="Skipped (auto-generated)">${escHtml(text)}</td>`;
+              } else if (info) {
                 const cls = 'status-' + info.status;
                 const label = info.status === 'wrong' ? 'WRONG' : 'MISSING';
                 const tip = info.expected ? `${label}: expected "${info.expected}"` : label;
@@ -2722,6 +2725,7 @@
 
               if (data.event === 'init') {
                 checkProgress.totalPairs = data.totalPairs;
+                checkSkipColumns = data.skipColumns || [];
                 renderCheckPanel();
                 // Restore values
                 if (document.getElementById('checkPreset')) document.getElementById('checkPreset').value = preset;
