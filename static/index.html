@@ -1328,7 +1328,8 @@
     function switchPage(index) {
       const pages = ticketData.pages || [];
       if (index < 0 || index >= pages.length) return;
-      cellHighlightData = null;
+      // Preserve cross-page highlights when switching pages
+      if (!cellHighlightData?.crossPage) cellHighlightData = null;
       currentPageIndex = index;
       renderPageNav();
       loadPageImage();
@@ -1831,8 +1832,10 @@
               const isError = cell.isFormatError;
 
               let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
-              // Check if cell has valid location (not (0,0,1,1) and has regNdx)
-              const hasLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
+              // Check if cell has valid location
+              const hasAreaList = cell.areaList && cell.areaList.length > 0;
+              const hasSingleLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
+              const hasLoc = hasAreaList || hasSingleLoc;
               if (hasLoc) cellClass += ' locatable';
               let content;
               if (isModified) {
@@ -1841,7 +1844,17 @@
                 content = escHtml(textModify || text);
               }
 
-              const locAttr = hasLoc ? ` data-rx="${cell.x}" data-ry="${cell.y}" data-rw="${cell.w}" data-rh="${cell.h}" data-rp="${cell.regNdx}" data-rk="${escHtml(h.name || h.text || h.key)}" data-rt="${escHtml(textModify || text)}"` : '';
+              let locAttr = '';
+              if (hasLoc) {
+                locAttr = ` data-rk="${escHtml(h.name || h.text || h.key)}" data-rt="${escHtml(textModify || text)}"`;
+                if (hasAreaList) {
+                  // Store areaList as JSON for multi-area/cross-page positioning
+                  locAttr += ` data-areas='${JSON.stringify(cell.areaList)}'`;
+                  locAttr += ` data-rp="${cell.areaList[0].regNdx}"`;
+                } else {
+                  locAttr += ` data-rx="${cell.x}" data-ry="${cell.y}" data-rw="${cell.w}" data-rh="${cell.h}" data-rp="${cell.regNdx}"`;
+                }
+              }
               html += `<td class="${cellClass}"${locAttr}>${content}</td>`;
             });
             html += '</tr>';
@@ -1915,17 +1928,23 @@
           }
 
           if (tipMode === 'group' && el.tagName === 'TD') {
-            // Highlight entire row
             const tr = el.closest('tr');
             if (tr) tr.classList.add('row-active');
             locateRow(tr);
           } else {
             el.classList.add('cell-active');
-            locateCell(
-              parseInt(el.dataset.rx), parseInt(el.dataset.ry),
-              parseInt(el.dataset.rw), parseInt(el.dataset.rh),
-              parseInt(el.dataset.rp), el.dataset.rk, el.dataset.rt
-            );
+            const areasJson = el.dataset.areas;
+            if (areasJson) {
+              // Cell has areaList (multi-area/cross-page)
+              const areas = JSON.parse(areasJson);
+              locateCellAreas(areas, el.dataset.rk, el.dataset.rt);
+            } else {
+              locateCell(
+                parseInt(el.dataset.rx), parseInt(el.dataset.ry),
+                parseInt(el.dataset.rw), parseInt(el.dataset.rh),
+                parseInt(el.dataset.rp), el.dataset.rk, el.dataset.rt
+              );
+            }
           }
         });
       });
@@ -1974,6 +1993,45 @@
       requestAnimationFrame(() => scrollToCellHighlight());
     }
 
+    async function locateCellAreas(areaList, key, text) {
+      // Store all areas with page info — persists across page switches
+      cellHighlightData = { multi: true, crossPage: true, cells: areaList.map(a => ({
+        x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx, key, text: ''
+      })), key, text };
+      vlmHighlightAreas = []; vlmActiveGroup = -1;
+
+      if (tipMode === 'off' || tipMode === 'all') {
+        tipMode = 'cell';
+        document.querySelectorAll('.tip-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell'));
+      }
+
+      const ocrInput = document.getElementById('ocrSearchInput');
+      if (ocrInput.value) {
+        ocrInput.value = '';
+        ocrSearchResults = [];
+        ocrSearchCurrent = -1;
+        document.getElementById('ocrSearchInfo').textContent = '';
+      }
+
+      // Switch to Images tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('.tab[data-tab="images"]').classList.add('active');
+      document.getElementById('panelImages').classList.add('active');
+
+      // Navigate to the first area's page
+      const firstPage = areaList[0].regNdx;
+      if (firstPage !== currentPageIndex) {
+        currentPageIndex = firstPage;
+        renderPageNav();
+        await loadPageImage();
+      } else {
+        renderAreaOverlays();
+        renderCellHighlight();
+      }
+      requestAnimationFrame(() => scrollToCellHighlight());
+    }
+
     function renderCellHighlight() {
       const container = document.getElementById('imageContainer');
       container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
@@ -1995,7 +2053,14 @@
         scaleY = img.naturalHeight / processorImgSize.h;
       }
 
-      const items = cellHighlightData.multi ? cellHighlightData.cells : [cellHighlightData];
+      let items = cellHighlightData.multi ? cellHighlightData.cells : [cellHighlightData];
+      // Filter by current page for cross-page highlights
+      if (cellHighlightData.crossPage) {
+        items = items.filter(c => c.regNdx === currentPageIndex);
+      }
+      if (!items.length) return;
+      // Use parent key/text as label for cross-page areas
+      const parentLabel = cellHighlightData.crossPage ? `${cellHighlightData.key}: ${cellHighlightData.text}` : '';
       items.forEach(({ x, y, w, h, key, text }) => {
         const div = document.createElement('div');
         div.className = 'cell-highlight';
@@ -2029,18 +2094,30 @@
       const firstCell = cells[0];
       const pageIdx = parseInt(firstCell.dataset.rp);
 
-      // Collect all cell positions for this row
-      cellHighlightData = null;
+      // Collect all cell positions for this row (including areaList sub-areas)
       vlmHighlightAreas = []; vlmActiveGroup = -1;
 
-      const rowCells = cells.map(c => ({
-        x: parseInt(c.dataset.rx), y: parseInt(c.dataset.ry),
-        w: parseInt(c.dataset.rw), h: parseInt(c.dataset.rh),
-        text: c.dataset.rt || '', key: c.dataset.rk || ''
-      }));
+      const rowCells = [];
+      let hasCrossPage = false;
+      cells.forEach(c => {
+        const areasJson = c.dataset.areas;
+        if (areasJson) {
+          const areas = JSON.parse(areasJson);
+          areas.forEach(a => {
+            rowCells.push({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx, key: c.dataset.rk || '', text: '' });
+          });
+          if (new Set(areas.map(a => a.regNdx)).size > 1 || (areas[0] && areas[0].regNdx !== parseInt(firstCell.dataset.rp))) hasCrossPage = true;
+        } else {
+          rowCells.push({
+            x: parseInt(c.dataset.rx), y: parseInt(c.dataset.ry),
+            w: parseInt(c.dataset.rw), h: parseInt(c.dataset.rh),
+            regNdx: parseInt(c.dataset.rp), key: c.dataset.rk || '', text: c.dataset.rt || ''
+          });
+          if (parseInt(c.dataset.rp) !== parseInt(firstCell.dataset.rp)) hasCrossPage = true;
+        }
+      });
 
-      // Store as multi-cell highlight
-      cellHighlightData = { multi: true, cells: rowCells };
+      cellHighlightData = { multi: true, crossPage: hasCrossPage, cells: rowCells };
 
       // Clear OCR search
       const ocrInput = document.getElementById('ocrSearchInput');
@@ -2103,16 +2180,25 @@
         const color = GROUP_COLORS[ri % GROUP_COLORS.length];
         const border = GROUP_BORDERS[ri % GROUP_BORDERS.length];
         tr.querySelectorAll('td.locatable').forEach(td => {
-          if (parseInt(td.dataset.rp) !== currentPageIndex) return;
-          const div = document.createElement('div');
-          div.className = 'cell-highlight';
-          div.style.left = (padX + parseInt(td.dataset.rx) * scaleX * zoomLevel) + 'px';
-          div.style.top = (padY + parseInt(td.dataset.ry) * scaleY * zoomLevel) + 'px';
-          div.style.width = (parseInt(td.dataset.rw) * scaleX * zoomLevel) + 'px';
-          div.style.height = (parseInt(td.dataset.rh) * scaleY * zoomLevel) + 'px';
-          div.style.borderColor = border;
-          div.style.background = color;
-          container.appendChild(div);
+          const drawBox = (x, y, w, h) => {
+            const div = document.createElement('div');
+            div.className = 'cell-highlight';
+            div.style.left = (padX + x * scaleX * zoomLevel) + 'px';
+            div.style.top = (padY + y * scaleY * zoomLevel) + 'px';
+            div.style.width = (w * scaleX * zoomLevel) + 'px';
+            div.style.height = (h * scaleY * zoomLevel) + 'px';
+            div.style.borderColor = border;
+            div.style.background = color;
+            container.appendChild(div);
+          };
+          const areasJson = td.dataset.areas;
+          if (areasJson) {
+            JSON.parse(areasJson).forEach(a => {
+              if (a.regNdx === currentPageIndex) drawBox(a.x, a.y, a.w, a.h);
+            });
+          } else if (parseInt(td.dataset.rp) === currentPageIndex) {
+            drawBox(parseInt(td.dataset.rx), parseInt(td.dataset.ry), parseInt(td.dataset.rw), parseInt(td.dataset.rh));
+          }
         });
       });
     }

@@ -257,7 +257,7 @@ async def get_ticket(request: Request, ticket_id: str):
             for row_cells in tbl.get("data", []):
                 row = {}
                 for cell in row_cells:
-                    row[cell["key"]] = {
+                    cell_data = {
                         "text": cell.get("text", ""),
                         "textModify": cell.get("textModify", ""),
                         "confidence": cell.get("confidence", []),
@@ -268,6 +268,13 @@ async def get_ticket(request: Request, ticket_id: str):
                         "w": cell.get("w", 0),
                         "h": cell.get("h", 0),
                     }
+                    # Include areaList if present (for multi-area/cross-page cells)
+                    if cell.get("areaList"):
+                        cell_data["areaList"] = [
+                            {"regNdx": a.get("regNdx"), "x": a.get("x", 0), "y": a.get("y", 0), "w": a.get("w", 0), "h": a.get("h", 0)}
+                            for a in cell["areaList"]
+                        ]
+                    row[cell["key"]] = cell_data
                 rows.append(row)
             tables.append({
                 "table": tbl.get("table"),
