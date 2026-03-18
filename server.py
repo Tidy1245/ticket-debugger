@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import io
 import json
 import shutil
 import struct
@@ -10,10 +11,11 @@ from pathlib import Path
 from typing import List
 
 import httpx
+from PIL import Image
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 VLM_URL = "http://192.168.0.37:5070/v1/chat/completions"
 VLM_MODEL = "/MODULE/peter/models/Qwen3-VL-30B-A3B-Instruct"
@@ -372,6 +374,323 @@ def _get_jpeg_size(path: Path) -> tuple[int, int]:
         h = struct.unpack(">I", data[20:24])[0]
         return w, h
     return 0, 0
+
+
+# --- VLM Check Answer ---
+
+CHECK_PRESETS = {
+    'BVLGARI': {
+        'keywords': [['Tva', 'Code'], ['Country of origin:'], ['Commodity code:']],
+        'formatRules': """BVLGARI Import Invoice:
+- Item1 (Code): digits under "Code" column. Ignore "Cde. xxxx Po No. Delivery xxxx".
+- Item2 (Description): text with underscores below Item1, to before "Serial number" or "Commodity code". Multi-line.
+- Item3 (Serial number): after "Serial number", alphanumeric. May be absent.
+- U_Price: number under "Prix unit/Unit price"
+- Qty: number under "Quantité/Qty"
+- Unit: text under "UM" (e.g. PCE)
+- Amount: number under "Prix/Price"
+- Mf_Cty: 2-letter code after "Country of origin:"
+- N_W: number after "Net Weight". If grams divide by 1000. May be absent.""",
+        'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
+    },
+    'LVMH': {
+        'keywords': [['Reference', 'Description'], ['Country of origin'], ['Serial']],
+        'formatRules': """LVMH Watch & Jewellery Import Invoice:
+- Item1 (Reference): alphanumeric reference code (e.g. AB1234-567)
+- Item2 (Description): product description text. Multi-line.
+- Item3 (Serial number): serial number after "Serial". May be absent.
+- U_Price: unit price number
+- Qty: quantity number
+- Unit: unit text (e.g. PCE)
+- Amount: total amount number
+- Mf_Cty: 2-letter country code after "Country of origin"
+- N_W: net weight number. May be absent.""",
+        'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
+    },
+    'BOUCHERON': {
+        'keywords': [['Code', 'Description'], ['Lot Number'], ['Origin']],
+        'formatRules': """BOUCHERON Import Invoice:
+- Item1 (Code): product code (letters + digits, e.g. JCO123)
+- Item2 (Description): product description. Multi-line.
+- Item3 (Lot Number): lot number. May be absent.
+- U_Price: unit price number
+- Qty: quantity number
+- Unit: unit text
+- Amount: total amount number
+- Mf_Cty: origin country text or code
+- N_W: net weight. May be absent.""",
+        'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
+    },
+    'LV': {
+        'keywords': [['MADE IN'], ['Item Code'], ['Reference']],
+        'formatRules': """Louis Vuitton Import Invoice:
+- Item1 (Item Code): 6-character alphanumeric code
+- Item2 (Reference): reference code
+- Item3 (Description): product description. Multi-line.
+- U_Price: unit price number
+- Qty: quantity number
+- Unit: unit text
+- Amount: total amount number
+- Mf_Cty: country from "MADE IN" line (2-letter code)
+- N_W: net weight. May be absent.""",
+        'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
+    },
+}
+
+
+def filter_table_pages(reg_list: list, keywords: list[list[str]]) -> list[int]:
+    """Filter pages that contain table data by checking OCR text for keywords.
+    Each keyword group is a list of strings that must ALL appear on the page.
+    A page matches if ANY keyword group is fully matched.
+    """
+    result = []
+    for i, reg in enumerate(reg_list):
+        areas = reg.get("analyzer", {}).get("areaList", [])
+        page_text = " ".join(a.get("text", "") for a in areas).lower()
+        for kw_group in keywords:
+            if all(kw.lower() in page_text for kw in kw_group):
+                result.append(i)
+                break
+    return result
+
+
+def concat_images_b64(paths: list[Path]) -> str:
+    """Vertically concatenate images using PIL, return base64."""
+    images = [Image.open(p) for p in paths if p.exists()]
+    if not images:
+        return ""
+    if len(images) == 1:
+        buf = io.BytesIO()
+        images[0].save(buf, format="JPEG", quality=85)
+        return base64.b64encode(buf.getvalue()).decode()
+    max_w = max(img.width for img in images)
+    total_h = sum(img.height for img in images)
+    combined = Image.new("RGB", (max_w, total_h), (255, 255, 255))
+    y_offset = 0
+    for img in images:
+        combined.paste(img, (0, y_offset))
+        y_offset += img.height
+    buf = io.BytesIO()
+    combined.save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def build_check_prompt(format_rules: str, columns: str, rows_text: str) -> str:
+    """Build the VLM check-answer prompt."""
+    return f"""You are verifying OCR pipeline output against the original document image.
+
+Format rules for this document type:
+{format_rules}
+
+Columns: {columns}
+
+The OCR pipeline extracted these rows:
+{rows_text}
+
+Compare the pipeline output with what you see in the image. For each row, check every field.
+Output JSON array. For each row:
+{{"row": ROW_INDEX, "fields": [{{"col": "COLUMN_NAME", "status": "CORRECT|WRONG|MISSING", "expected": "correct value if WRONG or MISSING"}}]}}
+
+Rules:
+- Only include fields that are WRONG or MISSING. Omit CORRECT fields.
+- ROW_INDEX is 0-based.
+- If a row is entirely correct, include it with empty fields array.
+- Output ONLY the JSON array, no other text."""
+
+
+class VLMCheckRequest(BaseModel):
+    preset: str = ""
+    customRules: str = ""
+    columns: str = ""
+
+
+@app.post("/api/tickets/{ticket_id}/vlm-check-answer")
+async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckRequest):
+    """Run VLM-based answer checking via SSE stream."""
+    ip = get_ip(request)
+    touch_ip(ip)
+    config_path = ip_dir(ip) / ticket_id / "config.json"
+    if not config_path.exists():
+        raise HTTPException(404, "Ticket not found")
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    reg_list = data.get("regList", [])
+    ticket_dir = ip_dir(ip) / ticket_id
+
+    # Get preset config or custom
+    preset_cfg = CHECK_PRESETS.get(body.preset, {})
+    format_rules = body.customRules or preset_cfg.get('formatRules', '')
+    columns = body.columns or preset_cfg.get('columns', '')
+    keywords = preset_cfg.get('keywords', [])
+
+    if not format_rules or not columns:
+        raise HTTPException(400, "Format rules and columns are required")
+
+    # Get integrator table rows
+    raw_integrator = data.get("integrator", {})
+    if isinstance(raw_integrator, list):
+        integrator_list = raw_integrator
+    else:
+        integrator_list = [raw_integrator] if raw_integrator else []
+
+    table_rows = []
+    table_headers = []
+    for integ in integrator_list:
+        for tbl in integ.get("tableList", []):
+            if not table_headers:
+                table_headers = [h.get("key", "") for h in tbl.get("headerList", [])]
+            for row_cells in tbl.get("data", []):
+                row = {}
+                for cell in row_cells:
+                    key = cell.get("key", "")
+                    row[key] = cell.get("textModify", "") or cell.get("text", "")
+                    # Track regNdx for page association
+                    if "regNdx" in cell:
+                        row[f"_regNdx_{key}"] = cell["regNdx"]
+                table_rows.append(row)
+
+    if not table_rows:
+        raise HTTPException(400, "No table data found in ticket")
+
+    # Filter table pages using keywords
+    if keywords:
+        table_pages = filter_table_pages(reg_list, keywords)
+    else:
+        # Fallback: use pages that have table data (by regNdx)
+        page_set = set()
+        for row in table_rows:
+            for k, v in row.items():
+                if k.startswith("_regNdx_"):
+                    page_set.add(v)
+        table_pages = sorted(page_set)
+
+    if not table_pages:
+        # Use all pages as fallback
+        table_pages = list(range(len(reg_list)))
+
+    # Pair pages: every 2 pages concatenated
+    pairs = []
+    for i in range(0, len(table_pages), 2):
+        if i + 1 < len(table_pages):
+            pairs.append((table_pages[i], table_pages[i + 1]))
+        else:
+            pairs.append((table_pages[i],))
+
+    # Map rows to page pairs by regNdx
+    def get_row_pages(row):
+        pages = set()
+        for k, v in row.items():
+            if k.startswith("_regNdx_"):
+                pages.add(v)
+        return pages
+
+    async def event_stream():
+        t0 = time.time()
+        yield f"data: {json.dumps({'event': 'init', 'totalPairs': len(pairs), 'tablePages': table_pages, 'totalRows': len(table_rows)})}\n\n"
+
+        all_results = []
+
+        async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
+            for pi, pair in enumerate(pairs):
+                pair_t0 = time.time()
+
+                # Get image paths for this pair
+                img_paths = []
+                for page_idx in pair:
+                    if page_idx < len(reg_list):
+                        reg = reg_list[page_idx]
+                        img_filename = reg.get("inputList", [{}])[0].get("path")
+                        if img_filename:
+                            img_path = ticket_dir / img_filename
+                            if img_path.exists():
+                                img_paths.append(img_path)
+
+                if not img_paths:
+                    all_results.append({"pairIndex": pi, "pages": list(pair), "rows": []})
+                    elapsed = round(time.time() - t0, 1)
+                    yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairResults': []})}\n\n"
+                    continue
+
+                # Concatenate images
+                img_b64 = concat_images_b64(img_paths)
+                if not img_b64:
+                    continue
+
+                # Find rows belonging to this pair's pages
+                pair_page_set = set(pair)
+                pair_rows = []
+                pair_row_indices = []
+                for ri, row in enumerate(table_rows):
+                    row_pages = get_row_pages(row)
+                    if row_pages & pair_page_set or not row_pages:
+                        pair_rows.append(row)
+                        pair_row_indices.append(ri)
+
+                if not pair_rows:
+                    all_results.append({"pairIndex": pi, "pages": list(pair), "rows": []})
+                    elapsed = round(time.time() - t0, 1)
+                    yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairResults': []})}\n\n"
+                    continue
+
+                # Build rows text
+                col_list = [c.strip() for c in columns.split(",")]
+                rows_text = ""
+                for i, row in enumerate(pair_rows):
+                    vals = []
+                    for c in col_list:
+                        # Try exact key match, then case-insensitive
+                        val = row.get(c, "")
+                        if not val:
+                            for k, v in row.items():
+                                if not k.startswith("_regNdx_") and k.lower() == c.lower():
+                                    val = v
+                                    break
+                        vals.append(f"{c}={val}" if val else f"{c}=")
+                    rows_text += f"Row {pair_row_indices[i]}: {', '.join(vals)}\n"
+
+                # Build prompt
+                prompt = build_check_prompt(format_rules, columns, rows_text)
+
+                # Call VLM
+                try:
+                    resp = await client.post(VLM_URL, json={
+                        "model": VLM_MODEL,
+                        "messages": [{"role": "user", "content": [
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                            {"type": "text", "text": prompt},
+                        ]}],
+                        "max_tokens": 4000,
+                        "temperature": 0.1,
+                    })
+                    resp.raise_for_status()
+                    content = resp.json()["choices"][0]["message"]["content"]
+
+                    # Parse JSON response
+                    js = content
+                    if "```json" in content:
+                        js = content.split("```json")[1].split("```")[0]
+                    elif "```" in content:
+                        js = content.split("```")[1].split("```")[0]
+                    parsed = json.loads(js.strip())
+
+                    # Normalize: ensure it's a list
+                    if not isinstance(parsed, list):
+                        parsed = [parsed]
+
+                    pair_results = parsed
+                except Exception as e:
+                    pair_results = [{"error": str(e)}]
+
+                all_results.append({"pairIndex": pi, "pages": list(pair), "results": pair_results})
+                elapsed = round(time.time() - t0, 1)
+                yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairResults': pair_results})}\n\n"
+
+        total_elapsed = round(time.time() - t0, 1)
+        yield f"data: {json.dumps({'event': 'done', 'results': all_results, 'totalElapsed': total_elapsed})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.post("/api/tickets/{ticket_id}/vlm-grouping")
