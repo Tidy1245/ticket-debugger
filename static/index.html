@@ -204,27 +204,28 @@
     .vlm-highlight { position: absolute; border: 2px solid #8b5cf6; background: rgba(139, 92, 246, 0.12); pointer-events: none; z-index: 8; border-radius: 2px; }
 
     /* VLM Check Answer */
-    .check-config { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px; }
+    .check-config { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; }
     .check-config-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
     .check-config-title svg { width: 16px; height: 16px; color: var(--accent-amber); }
     .check-progress { height: 28px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border); position: relative; overflow: hidden; margin-bottom: 16px; }
     .check-progress-bar { height: 100%; background: linear-gradient(90deg, #10b981, #34d399); transition: width 0.4s ease; border-radius: 5px; }
     .check-progress-text { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-family: 'Fira Code', monospace; color: var(--text-primary); font-weight: 500; }
-    .check-result-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; }
-    .check-result-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .check-result-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: 'Fira Code', monospace; }
     .check-result-table th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 500; font-size: 11px; position: sticky; top: 0; background: var(--bg-card); }
-    .check-result-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: 'Fira Code', monospace; font-size: 11px; }
-    .check-result-table td.status-correct { background: rgba(16, 185, 129, 0.08); }
-    .check-result-table td.status-wrong { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); cursor: help; }
-    .check-result-table td.status-missing { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); cursor: help; }
-    .check-result-table td.status-unchecked { color: var(--text-muted); }
+    .check-result-table td { padding: 5px 10px; border-bottom: 1px solid rgba(42,42,64,0.5); font-family: 'Fira Code', monospace; font-size: 11px; }
+    .check-result-table td[contenteditable] { cursor: text; }
+    .check-result-table td[contenteditable]:focus { outline: 1px solid var(--accent-amber); background: rgba(245, 158, 11, 0.06); }
+    .check-row-pipeline { color: var(--accent-green); }
+    .check-row-vlm { color: #86efac; }
+    .check-diff-highlight { background: rgba(239, 68, 68, 0.35); border-radius: 2px; padding: 0 1px; color: var(--accent-red); }
+    .check-diff-vlm { background: rgba(134, 239, 172, 0.2); border-radius: 2px; padding: 0 1px; }
+    .check-missing-cell { background: rgba(245, 158, 11, 0.1); }
     .check-summary { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
     .check-stat { font-size: 12px; font-family: 'Fira Code', monospace; padding: 4px 10px; border-radius: 4px; }
     .check-stat-correct { background: rgba(16, 185, 129, 0.12); color: var(--accent-green); }
     .check-stat-wrong { background: rgba(239, 68, 68, 0.12); color: var(--accent-red); }
     .check-stat-missing { background: rgba(245, 158, 11, 0.12); color: var(--accent-amber); }
-    .check-stat-time { background: rgba(139, 92, 246, 0.12); color: var(--accent-purple); }
-    .check-expected { font-size: 10px; color: var(--accent-green); display: block; margin-top: 2px; }
+    .vlm-editable { min-width: 40px; }
 
     /* Table-Image Position mode selector */
     .tip-mode { display: flex; align-items: center; gap: 2px; }
@@ -1248,7 +1249,7 @@
       tableSearchQuery = '';
       cellHighlightData = null;
       vlmResult = null; vlmActiveGroup = -1; vlmHighlightAreas = [];
-      checkResult = null; checkLoading = false; checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 }; checkSkipColumns = [];
+      vlmAnswers = null; checkLoading = false; checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 }; checkCompareResult = null;
       document.getElementById('ocrSearchInput').value = '';
       document.getElementById('ocrSearchInfo').textContent = '';
       // tableSearchInput is dynamically rendered in renderTable(), no need to clear here
@@ -1269,6 +1270,8 @@
       renderPageNav();
       renderTable();
       renderVLMPanel();
+      await loadCheckPresets();
+      await loadVlmAnswers();
       renderCheckPanel();
       loadPageImage();
     }
@@ -2505,64 +2508,145 @@
     }
 
     // --- VLM Check Answer ---
-    let checkResult = null;
+    let vlmAnswers = null;       // { rows: [{col: val, ...}, ...], columns, skipColumns, ... }
     let checkLoading = false;
     let checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
-    let checkSkipColumns = [];
+    let checkPresets = { builtin: {}, custom: {} };
+    let checkCompareResult = null; // comparison results array
 
-    const CHECK_PRESETS = {
-      '': { formatRules: '', columns: '' },
-      'BVLGARI': {
-        formatRules: `BVLGARI Import Invoice:
-- Item1 (Code): digits under "Code" column
-- Item2 (Description): text with underscores below Item1
-- Item3 (Serial number): after "Serial number"
-- U_Price: number under "Prix unit/Unit price"
-- Qty: number under "Quantité/Qty"
-- Unit: text under "UM" (e.g. PCE)
-- Amount: number under "Prix/Price"
-- Mf_Cty: 2-letter code after "Country of origin:"
-- N_W: number after "Net Weight"`,
-        columns: 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
-      },
-      'LVMH': {
-        formatRules: 'LVMH Watch & Jewellery Import Invoice: Reference, Description, Serial Number, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
-        columns: 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
-      },
-      'BOUCHERON': {
-        formatRules: 'BOUCHERON Import Invoice: Code, Description, Lot Number, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
-        columns: 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
-      },
-      'LV': {
-        formatRules: 'Louis Vuitton Import Invoice: Item Code, Reference, Description, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
-        columns: 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
-      },
-    };
+    async function loadCheckPresets() {
+      try { checkPresets = await fetchJSON('/api/check-presets'); } catch {}
+    }
+
+    async function loadVlmAnswers() {
+      if (!currentTicket) return;
+      try { vlmAnswers = await fetchJSON(`/api/vlm-answers/${currentTicket}`); } catch { vlmAnswers = null; }
+    }
+
+    // --- String diff utilities ---
+    function normalizeStr(s) {
+      if (!s) return '';
+      return s.trim().replace(/\s+/g, ' ').replace(/，/g, ',').replace(/。/g, '.').replace(/[\u00A0]/g, ' ');
+    }
+
+    function lcsMatrix(a, b) {
+      const m = a.length, n = b.length;
+      const dp = [];
+      for (let i = 0; i <= m; i++) { dp[i] = []; for (let j = 0; j <= n; j++) dp[i][j] = 0; }
+      for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+          dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
+      return dp;
+    }
+
+    function charDiff(a, b) {
+      // Returns which chars are "different" in each string via LCS backtrack
+      const dp = lcsMatrix(a, b);
+      let i = a.length, j = b.length;
+      const aMatch = new Array(a.length).fill(false);
+      const bMatch = new Array(b.length).fill(false);
+      while (i > 0 && j > 0) {
+        if (a[i-1] === b[j-1]) { aMatch[i-1] = true; bMatch[j-1] = true; i--; j--; }
+        else if (dp[i-1][j] >= dp[i][j-1]) i--;
+        else j--;
+      }
+      return { aMatch, bMatch };
+    }
+
+    function renderDiffHtml(text, matchArr, diffClass) {
+      // Render text with non-matching chars wrapped in <span class="diffClass">
+      let html = '';
+      let inDiff = false;
+      for (let i = 0; i < text.length; i++) {
+        if (!matchArr[i] && !inDiff) { html += `<span class="${diffClass}">`; inDiff = true; }
+        else if (matchArr[i] && inDiff) { html += '</span>'; inDiff = false; }
+        const ch = text[i];
+        html += ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : ch;
+      }
+      if (inDiff) html += '</span>';
+      return html;
+    }
+
+    function compareField(pipelineVal, vlmVal) {
+      const a = normalizeStr(pipelineVal);
+      const b = normalizeStr(vlmVal);
+      if (a === b) return { status: 'match' };
+      if (!a && b) return { status: 'missing', vlmVal: b };
+      if (a && !b) return { status: 'match' }; // VLM didn't read it — not an error
+      const { aMatch, bMatch } = charDiff(a, b);
+      const lcsLen = aMatch.filter(Boolean).length;
+      const sim = lcsLen / Math.max(a.length, b.length);
+      return { status: sim >= 0.95 ? 'match' : 'wrong', aMatch, bMatch, normA: a, normB: b, similarity: sim };
+    }
+
+    function runComparison() {
+      if (!vlmAnswers || !ticketData) { checkCompareResult = null; return; }
+      const tables = ticketData.tables || [];
+      const t = tables[0];
+      const pipelineRows = t ? t.rows || [] : [];
+      const vlmRows = vlmAnswers.rows || [];
+      const skipCols = vlmAnswers.skipColumns || [];
+      const colStr = vlmAnswers.columns || '';
+      const colKeys = colStr ? colStr.split(',').map(c => c.trim()).filter(c => !skipCols.includes(c)) : [];
+
+      const results = [];
+      const maxRows = Math.max(pipelineRows.length, vlmRows.length);
+      let matchCount = 0, wrongCount = 0, missingCount = 0;
+
+      for (let ri = 0; ri < maxRows; ri++) {
+        const pRow = pipelineRows[ri] || {};
+        const vRow = vlmRows[ri] || {};
+        const cells = [];
+        for (const col of colKeys) {
+          const pCell = pRow[col] || {};
+          const pVal = pCell.textModify || pCell.text || '';
+          const vVal = vRow[col] || '';
+          const cmp = compareField(pVal, vVal);
+          cells.push({ col, pVal, vVal, ...cmp });
+          if (cmp.status === 'match') matchCount++;
+          else if (cmp.status === 'missing') missingCount++;
+          else wrongCount++;
+        }
+        results.push({ row: ri, cells });
+      }
+      checkCompareResult = { results, matchCount, wrongCount, missingCount, colKeys, skipCols };
+    }
 
     function renderCheckPanel() {
       const el = document.getElementById('checkContent');
       if (!el || !ticketData) return;
-
       let html = '';
 
-      // Configuration section
-      html += '<div class="check-config"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>VLM Check Answer</div>';
+      // === Section A: Configuration ===
+      html += '<div class="check-config"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>Step 1: VLM 讀取設定</div>';
 
-      // Preset
-      html += '<div class="vlm-grid" style="margin-bottom:12px;">';
-      html += '<div class="vlm-field"><label>Preset</label><select id="checkPreset"><option value="">— None —</option>';
-      Object.keys(CHECK_PRESETS).forEach(k => { if (k) html += `<option value="${k}">${k}</option>`; });
+      // Preset selector with save/delete
+      html += '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;">';
+      html += '<div class="vlm-field" style="flex:1;"><label>Preset</label><select id="checkPreset"><option value="">— 無 —</option>';
+      if (checkPresets.builtin) {
+        html += '<optgroup label="內建">';
+        Object.keys(checkPresets.builtin).forEach(k => { html += `<option value="${k}">${k}</option>`; });
+        html += '</optgroup>';
+      }
+      if (checkPresets.custom && Object.keys(checkPresets.custom).length) {
+        html += '<optgroup label="自訂">';
+        Object.keys(checkPresets.custom).forEach(k => { html += `<option value="custom:${k}">${k}</option>`; });
+        html += '</optgroup>';
+      }
       html += '</select></div>';
-      html += '<div class="vlm-field"><label>Columns</label><input type="text" id="checkColumns" placeholder="e.g. Item_No, Item1, Item2, U_Price, Qty, Amount"></div>';
+      html += '<button class="vlm-detail-btn" id="presetSaveBtn" title="儲存目前設定為自訂 Preset" style="height:30px;font-size:11px;">儲存 Preset</button>';
+      html += '<button class="vlm-detail-btn" id="presetDeleteBtn" title="刪除選中的自訂 Preset" style="height:30px;font-size:11px;color:var(--accent-red);">刪除</button>';
       html += '</div>';
 
-      // Custom rules
-      html += '<div class="vlm-field full" style="margin-bottom:12px;"><label>Format Rules (how to read each field from the document)</label><textarea id="checkRules" rows="4" placeholder="Describe how each column should be read from the document..."></textarea></div>';
+      html += '<div class="vlm-grid" style="margin-bottom:12px;">';
+      html += '<div class="vlm-field full"><label>欄位 (Columns)</label><input type="text" id="checkColumns" placeholder="如 Item1, Item2, U_Price, Qty, Amount"></div>';
+      html += '</div>';
+      html += '<div class="vlm-field full" style="margin-bottom:12px;"><label>格式規則 (告訴 VLM 如何從文件讀取每個欄位)</label><textarea id="checkRules" rows="4" placeholder="描述每個欄位的讀取方式..."></textarea></div>';
 
-      // Run button
+      // Run VLM button + progress
       html += '<div class="vlm-actions">';
-      html += `<button class="vlm-btn" id="checkRunBtn" style="background:linear-gradient(135deg, #f59e0b, #d97706);box-shadow:0 0 12px rgba(245,158,11,0.3);" ${checkLoading ? 'disabled' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Run Check</button>`;
-      if (checkLoading) html += '<div class="vlm-loading"><div class="spinner" style="border-top-color:#f59e0b;"></div><span>Checking...</span></div>';
+      html += `<button class="vlm-btn" id="checkRunBtn" style="background:linear-gradient(135deg, #f59e0b, #d97706);box-shadow:0 0 12px rgba(245,158,11,0.3);" ${checkLoading ? 'disabled' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>執行 VLM 讀取</button>`;
+      if (checkLoading) html += '<div class="vlm-loading"><div class="spinner" style="border-top-color:#f59e0b;"></div><span>讀取中...</span></div>';
       html += '</div></div>';
 
       // Progress bar
@@ -2570,134 +2654,205 @@
         const pct = Math.round((checkProgress.pairIndex + 1) / checkProgress.totalPairs * 100);
         const avgTime = checkProgress.elapsed / (checkProgress.pairIndex + 1);
         const eta = Math.round(avgTime * (checkProgress.totalPairs - checkProgress.pairIndex - 1));
-        html += '<div class="check-progress"><div class="check-progress-bar" style="width:' + pct + '%;"></div>';
-        html += '<div class="check-progress-text">Pair ' + (checkProgress.pairIndex + 1) + '/' + checkProgress.totalPairs + ' | ' + checkProgress.elapsed + 's | ETA ~' + eta + 's</div></div>';
+        html += `<div class="check-progress"><div class="check-progress-bar" style="width:${pct}%;"></div>`;
+        html += `<div class="check-progress-text">圖片組 ${checkProgress.pairIndex + 1}/${checkProgress.totalPairs} | ${checkProgress.elapsed}s | 預估剩餘 ~${eta}s</div></div>`;
       }
 
-      // Results
-      if (checkResult) {
-        html += '<div class="check-result-section">';
-        html += '<div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Results</div>';
+      // === Section B: VLM Answers ===
+      html += '<div class="check-config" style="margin-top:16px;"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>VLM 答案';
+      if (vlmAnswers) {
+        const ts = vlmAnswers.updatedAt ? new Date(vlmAnswers.updatedAt).toLocaleString() : '';
+        html += `<span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:12px;">${vlmAnswers.preset ? vlmAnswers.preset + ' | ' : ''}${ts}</span>`;
+      }
+      html += '</div>';
 
-        // Build field status map from VLM results
-        const fieldMap = {}; // { "row-col": { status, expected } }
-        let wrongCount = 0, missingCount = 0, correctCount = 0;
-        const allPairResults = checkResult.results || [];
-        for (const pr of allPairResults) {
-          for (const r of (pr.results || [])) {
-            if (r.error) continue;
-            const rowIdx = r.row;
-            const fields = r.fields || [];
-            if (fields.length === 0) {
-              // Row is entirely correct — mark all cols
-              fieldMap[`${rowIdx}_allCorrect`] = true;
-            }
-            for (const f of fields) {
-              const key = `${rowIdx}_${f.col}`;
-              if (f.status === 'WRONG') {
-                fieldMap[key] = { status: 'wrong', expected: f.expected || '' };
-                wrongCount++;
-              } else if (f.status === 'MISSING') {
-                fieldMap[key] = { status: 'missing', expected: f.expected || '' };
-                missingCount++;
-              }
-            }
-          }
-        }
+      if (vlmAnswers && vlmAnswers.rows && vlmAnswers.rows.length) {
+        const skipCols = vlmAnswers.skipColumns || [];
+        const colStr = vlmAnswers.columns || '';
+        const colKeys = colStr ? colStr.split(',').map(c => c.trim()).filter(c => !skipCols.includes(c)) : Object.keys(vlmAnswers.rows[0] || {}).filter(k => !k.startsWith('_'));
 
-        // Count correct cells
-        const tables = ticketData.tables || [];
-        const t = tables[0];
-        const headers = t ? t.headers || [] : [];
-        const rows = t ? t.rows || [] : [];
-        const colKeys = checkResult.columns ? checkResult.columns.split(',').map(c => c.trim()) : headers.map(h => h.key);
-
-        for (let ri = 0; ri < rows.length; ri++) {
-          for (const col of colKeys) {
-            const key = `${ri}_${col}`;
-            if (!fieldMap[key] && fieldMap[`${ri}_allCorrect`]) correctCount++;
-            else if (!fieldMap[key]) correctCount++; // unchecked treated as correct if row was checked
-          }
-        }
-
-        // Summary stats
-        html += '<div class="check-summary">';
-        if (correctCount > 0) html += `<span class="check-stat check-stat-correct">${correctCount} correct</span>`;
-        if (wrongCount > 0) html += `<span class="check-stat check-stat-wrong">${wrongCount} wrong</span>`;
-        if (missingCount > 0) html += `<span class="check-stat check-stat-missing">${missingCount} missing</span>`;
-        html += `<span class="check-stat check-stat-time">${checkResult.totalElapsed}s</span>`;
-        html += '</div>';
-
-        // Result table
-        if (t && rows.length) {
-          html += '<div style="overflow:auto;max-height:600px;">';
-          html += '<table class="check-result-table"><thead><tr><th>#</th>';
-          colKeys.forEach(col => { html += `<th>${escHtml(col)}</th>`; });
-          html += '</tr></thead><tbody>';
-
-          rows.forEach((row, ri) => {
-            html += `<tr><td style="color:var(--text-muted);">${ri}</td>`;
-            colKeys.forEach(col => {
-              const key = `${ri}_${col}`;
-              const info = fieldMap[key];
-              const cell = row[col] || {};
-              const text = cell.textModify || cell.text || '';
-              if (checkSkipColumns.includes(col)) {
-                html += `<td class="status-unchecked" title="Skipped (auto-generated)">${escHtml(text)}</td>`;
-              } else if (info) {
-                const cls = 'status-' + info.status;
-                const label = info.status === 'wrong' ? 'WRONG' : 'MISSING';
-                const tip = info.expected ? `${label}: expected "${info.expected}"` : label;
-                html += `<td class="${cls}" title="${escHtml(tip)}">${escHtml(text)}`;
-                if (info.expected) html += `<span class="check-expected">${escHtml(info.expected)}</span>`;
-                html += '</td>';
-              } else {
-                html += `<td class="status-correct">${escHtml(text)}</td>`;
-              }
-            });
-            html += '</tr>';
+        html += '<div style="overflow:auto;max-height:400px;margin-bottom:10px;">';
+        html += '<table class="check-result-table" id="vlmAnswerTable"><thead><tr><th>#</th>';
+        colKeys.forEach(col => { html += `<th>${escHtml(col)}</th>`; });
+        html += '</tr></thead><tbody>';
+        vlmAnswers.rows.forEach((row, ri) => {
+          html += `<tr>`;
+          html += `<td style="color:var(--text-muted);">${ri}</td>`;
+          colKeys.forEach(col => {
+            const val = row[col] || '';
+            html += `<td contenteditable="true" class="vlm-editable" data-row="${ri}" data-col="${col}">${escHtml(val)}</td>`;
           });
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
 
-          html += '</tbody></table></div>';
-        }
+        html += '<div style="display:flex;gap:8px;">';
+        html += '<button class="vlm-detail-btn" id="vlmSaveBtn">儲存答案</button>';
+        html += '<button class="vlm-detail-btn" id="vlmDeleteBtn" style="color:var(--accent-red);">刪除答案</button>';
         html += '</div>';
       } else if (!checkLoading) {
-        html += '<div class="check-result-section"><p style="color:var(--text-muted);font-size:12px;text-align:center;padding:30px 0;">Configure and run VLM Check to verify table data accuracy</p></div>';
+        html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">尚無 VLM 答案。請先執行 VLM 讀取。</p>';
       }
+      html += '</div>';
+
+      // === Section C: Comparison Results ===
+      html += '<div class="check-config" style="margin-top:16px;"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Step 2: 比對結果';
+      html += `<button class="vlm-detail-btn" id="checkCompareBtn" style="margin-left:auto;height:26px;font-size:11px;" ${vlmAnswers ? '' : 'disabled'}>執行比對</button>`;
+      html += '</div>';
+
+      if (checkCompareResult) {
+        const cr = checkCompareResult;
+        html += '<div class="check-summary">';
+        html += `<span class="check-stat check-stat-correct">${cr.matchCount} 正確</span>`;
+        if (cr.wrongCount > 0) html += `<span class="check-stat check-stat-wrong">${cr.wrongCount} 差異</span>`;
+        if (cr.missingCount > 0) html += `<span class="check-stat check-stat-missing">${cr.missingCount} 缺失</span>`;
+        html += '</div>';
+
+        html += '<div style="overflow:auto;max-height:600px;">';
+        html += '<table class="check-result-table"><thead><tr><th>#</th>';
+        cr.colKeys.forEach(col => { html += `<th>${escHtml(col)}</th>`; });
+        html += '</tr></thead><tbody>';
+
+        cr.results.forEach(rowResult => {
+          const ri = rowResult.row;
+          // Row 1: Pipeline
+          html += `<tr><td style="color:var(--text-muted);" rowspan="2">${ri}</td>`;
+          rowResult.cells.forEach(c => {
+            if (c.status === 'match') {
+              html += `<td class="check-row-pipeline">${escHtml(c.pVal)}</td>`;
+            } else if (c.status === 'missing') {
+              html += `<td class="check-row-pipeline" style="color:var(--text-muted);font-style:italic;">（空）</td>`;
+            } else {
+              // wrong — show diff
+              const diffHtml = renderDiffHtml(c.normA, c.aMatch, 'check-diff-highlight');
+              html += `<td class="check-row-pipeline">${diffHtml}</td>`;
+            }
+          });
+          html += '</tr>';
+
+          // Row 2: VLM
+          html += '<tr>';
+          rowResult.cells.forEach(c => {
+            if (c.status === 'match') {
+              html += `<td class="check-row-vlm">${escHtml(c.vVal)}</td>`;
+            } else if (c.status === 'missing') {
+              html += `<td class="check-missing-cell" style="color:var(--accent-amber);">${escHtml(c.vlmVal || c.vVal)}</td>`;
+            } else {
+              const diffHtml = renderDiffHtml(c.normB, c.bMatch, 'check-diff-vlm');
+              html += `<td class="check-row-vlm">${diffHtml}</td>`;
+            }
+          });
+          html += '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+      } else {
+        html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">有 VLM 答案後，點擊「執行比對」查看差異</p>';
+      }
+      html += '</div>';
 
       el.innerHTML = html;
 
-      // Attach listeners
+      // === Attach event listeners ===
       document.getElementById('checkRunBtn')?.addEventListener('click', startCheckAnswer);
+      document.getElementById('checkCompareBtn')?.addEventListener('click', () => { runComparison(); renderCheckPanel(); });
+
+      // Preset change
       document.getElementById('checkPreset')?.addEventListener('change', (e) => {
-        const p = CHECK_PRESETS[e.target.value] || {};
+        const val = e.target.value;
+        let p;
+        if (val.startsWith('custom:')) p = checkPresets.custom[val.slice(7)] || {};
+        else p = checkPresets.builtin[val] || {};
         if (document.getElementById('checkRules')) document.getElementById('checkRules').value = p.formatRules || '';
         if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = p.columns || '';
+      });
+
+      // Save preset
+      document.getElementById('presetSaveBtn')?.addEventListener('click', async () => {
+        const name = prompt('輸入 Preset 名稱：');
+        if (!name) return;
+        const rules = document.getElementById('checkRules')?.value || '';
+        const cols = document.getElementById('checkColumns')?.value || '';
+        try {
+          await fetch('/api/check-presets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, formatRules: rules, columns: cols, keywords: [], skipColumns: [] }),
+          });
+          await loadCheckPresets();
+          renderCheckPanel();
+        } catch (e) { alert('儲存失敗: ' + e.message); }
+      });
+
+      // Delete preset
+      document.getElementById('presetDeleteBtn')?.addEventListener('click', async () => {
+        const val = document.getElementById('checkPreset')?.value || '';
+        if (!val.startsWith('custom:')) { alert('只能刪除自訂 Preset'); return; }
+        const name = val.slice(7);
+        if (!confirm(`確定刪除自訂 Preset "${name}"？`)) return;
+        try {
+          await fetch(`/api/check-presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+          await loadCheckPresets();
+          renderCheckPanel();
+        } catch (e) { alert('刪除失敗: ' + e.message); }
+      });
+
+      // VLM answer save
+      document.getElementById('vlmSaveBtn')?.addEventListener('click', async () => {
+        if (!vlmAnswers || !currentTicket) return;
+        // Collect edited values from contenteditable cells
+        document.querySelectorAll('.vlm-editable').forEach(td => {
+          const ri = parseInt(td.dataset.row);
+          const col = td.dataset.col;
+          if (vlmAnswers.rows[ri]) vlmAnswers.rows[ri][col] = td.textContent;
+        });
+        try {
+          await fetch(`/api/vlm-answers/${currentTicket}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(vlmAnswers),
+          });
+          alert('答案已儲存');
+        } catch (e) { alert('儲存失敗: ' + e.message); }
+      });
+
+      // VLM answer delete
+      document.getElementById('vlmDeleteBtn')?.addEventListener('click', async () => {
+        if (!currentTicket || !confirm('確定刪除 VLM 答案？')) return;
+        try {
+          await fetch(`/api/vlm-answers/${currentTicket}`, { method: 'DELETE' });
+          vlmAnswers = null;
+          checkCompareResult = null;
+          renderCheckPanel();
+        } catch (e) { alert('刪除失敗: ' + e.message); }
       });
     }
 
     async function startCheckAnswer() {
       if (checkLoading || !currentTicket) return;
+      if (vlmAnswers && !confirm('已有 VLM 答案，重新讀取會覆寫。繼續？')) return;
       checkLoading = true;
-      checkResult = null;
+      checkCompareResult = null;
       checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
 
       // Save input values
       const preset = document.getElementById('checkPreset')?.value || '';
+      const actualPreset = preset.startsWith('custom:') ? preset.slice(7) : preset;
       const customRules = document.getElementById('checkRules')?.value || '';
       const columns = document.getElementById('checkColumns')?.value || '';
 
       renderCheckPanel();
-      // Restore values
-      if (document.getElementById('checkPreset')) document.getElementById('checkPreset').value = preset;
-      if (document.getElementById('checkRules')) document.getElementById('checkRules').value = customRules;
-      if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = columns;
+      // Restore form values after re-render
+      const restoreForm = () => {
+        if (document.getElementById('checkPreset')) document.getElementById('checkPreset').value = preset;
+        if (document.getElementById('checkRules')) document.getElementById('checkRules').value = customRules;
+        if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = columns;
+      };
+      restoreForm();
 
       try {
         const response = await fetch(`/api/tickets/${currentTicket}/vlm-check-answer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ preset, customRules, columns }),
+          body: JSON.stringify({ preset: actualPreset, customRules, columns }),
         });
 
         if (!response.ok) {
@@ -2708,7 +2863,6 @@
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-        let allResults = [];
 
         while (true) {
           const { done, value } = await reader.read();
@@ -2716,42 +2870,28 @@
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          buffer = lines.pop(); // keep incomplete line
+          buffer = lines.pop();
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
             try {
               const data = JSON.parse(line.slice(6));
-
               if (data.event === 'init') {
                 checkProgress.totalPairs = data.totalPairs;
-                checkSkipColumns = data.skipColumns || [];
-                renderCheckPanel();
-                // Restore values
-                if (document.getElementById('checkPreset')) document.getElementById('checkPreset').value = preset;
-                if (document.getElementById('checkRules')) document.getElementById('checkRules').value = customRules;
-                if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = columns;
+                renderCheckPanel(); restoreForm();
               } else if (data.event === 'progress') {
                 checkProgress.pairIndex = data.pairIndex;
                 checkProgress.elapsed = data.elapsed;
-                allResults.push({ pairIndex: data.pairIndex, results: data.pairResults });
-                renderCheckPanel();
-                // Restore values
-                if (document.getElementById('checkPreset')) document.getElementById('checkPreset').value = preset;
-                if (document.getElementById('checkRules')) document.getElementById('checkRules').value = customRules;
-                if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = columns;
+                renderCheckPanel(); restoreForm();
               } else if (data.event === 'done') {
-                checkResult = {
-                  results: data.results,
-                  totalElapsed: data.totalElapsed,
-                  columns: columns,
-                };
+                // Reload saved answers from server
+                await loadVlmAnswers();
               }
-            } catch (e) { /* skip malformed SSE */ }
+            } catch {}
           }
         }
       } catch (e) {
-        alert('VLM Check failed: ' + e.message);
+        alert('VLM 讀取失敗: ' + e.message);
       } finally {
         checkLoading = false;
         renderCheckPanel();
@@ -3037,6 +3177,7 @@
           renderPageNav();
           renderTable();
           renderVLMPanel();
+          await loadVlmAnswers();
           renderCheckPanel();
           loadPageImage();
         }

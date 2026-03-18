@@ -378,75 +378,96 @@ def _get_jpeg_size(path: Path) -> tuple[int, int]:
 
 # --- VLM Check Answer ---
 
+DATA_DIR = Path(__file__).parent / "data"
+VLM_ANSWERS_DIR = DATA_DIR / "vlm_answers"
+CUSTOM_PRESETS_DIR = DATA_DIR / "custom_presets"
+VLM_ANSWERS_DIR.mkdir(parents=True, exist_ok=True)
+CUSTOM_PRESETS_DIR.mkdir(parents=True, exist_ok=True)
+
 CHECK_PRESETS = {
     'BVLGARI': {
         'keywords': [['Tva', 'Code'], ['Country of origin:'], ['Commodity code:']],
         'skipColumns': ['Item_No'],
-        'formatRules': """BVLGARI Import Invoice:
-- Item1 (Code): digits under "Code" column. Ignore "Cde. xxxx Po No. Delivery xxxx".
-- Item2 (Description): text with underscores below Item1, to before "Serial number" or "Commodity code". Multi-line.
-- Item3 (Serial number): after "Serial number", alphanumeric. May be absent.
-- U_Price: number under "Prix unit/Unit price"
-- Qty: number under "Quantité/Qty"
-- Unit: text under "UM" (e.g. PCE)
-- Amount: number under "Prix/Price"
-- Mf_Cty: 2-letter code after "Country of origin:"
-- N_W: number after "Net Weight". If grams divide by 1000. May be absent.""",
+        'formatRules': """BVLGARI 進口發票：
+- Item1 (商品代碼)：「Code」欄位下的數字。忽略 "Cde. xxxx Po No. Delivery xxxx"。
+- Item2 (品名描述)：Item1 下方帶底線的文字，到 "Serial number" 或 "Commodity code" 之前。可能多行。
+- Item3 (序號)："Serial number" 之後的英數字串。可能不存在。
+- U_Price：「Prix unit/Unit price」欄位下的數字
+- Qty：「Quantité/Qty」欄位下的數字
+- Unit：「UM」欄位下的文字（如 PCE）
+- Amount：「Prix/Price」欄位下的數字
+- Mf_Cty：「Country of origin:」之後的2字母國碼
+- N_W：「Net Weight」之後的數字。若單位為公克則除以1000。可能不存在。""",
         'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
     },
     'LVMH': {
         'keywords': [['Reference', 'Description'], ['Country of origin'], ['Serial']],
         'skipColumns': ['Item_No'],
-        'formatRules': """LVMH Watch & Jewellery Import Invoice:
-- Item1 (Reference): alphanumeric reference code (e.g. AB1234-567)
-- Item2 (Description): product description text. Multi-line.
-- Item3 (Serial number): serial number after "Serial". May be absent.
-- U_Price: unit price number
-- Qty: quantity number
-- Unit: unit text (e.g. PCE)
-- Amount: total amount number
-- Mf_Cty: 2-letter country code after "Country of origin"
-- N_W: net weight number. May be absent.""",
+        'formatRules': """LVMH 腕錶珠寶進口發票：
+- Item1 (參考編號)：英數字參考代碼（如 AB1234-567）
+- Item2 (品名描述)：產品描述文字。可能多行。
+- Item3 (序號)："Serial" 之後的序號。可能不存在。
+- U_Price：單價數字
+- Qty：數量
+- Unit：單位文字（如 PCE）
+- Amount：總金額數字
+- Mf_Cty：「Country of origin」之後的2字母國碼
+- N_W：淨重數字。可能不存在。""",
         'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
     },
     'BOUCHERON': {
         'keywords': [['Code', 'Description'], ['Lot Number'], ['Origin']],
         'skipColumns': ['Item_No'],
-        'formatRules': """BOUCHERON Import Invoice:
-- Item1 (Code): product code (letters + digits, e.g. JCO123)
-- Item2 (Description): product description. Multi-line.
-- Item3 (Lot Number): lot number. May be absent.
-- U_Price: unit price number
-- Qty: quantity number
-- Unit: unit text
-- Amount: total amount number
-- Mf_Cty: origin country text or code
-- N_W: net weight. May be absent.""",
+        'formatRules': """BOUCHERON 進口發票：
+- Item1 (商品代碼)：字母+數字的產品代碼（如 JCO123）
+- Item2 (品名描述)：產品描述。可能多行。
+- Item3 (批號)：批號。可能不存在。
+- U_Price：單價數字
+- Qty：數量
+- Unit：單位文字
+- Amount：總金額數字
+- Mf_Cty：產地國碼或文字
+- N_W：淨重。可能不存在。""",
         'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
     },
     'LV': {
         'keywords': [['MADE IN'], ['Item Code'], ['Reference']],
         'skipColumns': ['Item_No'],
-        'formatRules': """Louis Vuitton Import Invoice:
-- Item1 (Item Code): 6-character alphanumeric code
-- Item2 (Reference): reference code
-- Item3 (Description): product description. Multi-line.
-- U_Price: unit price number
-- Qty: quantity number
-- Unit: unit text
-- Amount: total amount number
-- Mf_Cty: country from "MADE IN" line (2-letter code)
-- N_W: net weight. May be absent.""",
+        'formatRules': """Louis Vuitton 進口發票：
+- Item1 (商品代碼)：6碼英數字代碼
+- Item2 (參考編號)：參考代碼
+- Item3 (品名描述)：產品描述。可能多行。
+- U_Price：單價數字
+- Qty：數量
+- Unit：單位文字
+- Amount：總金額數字
+- Mf_Cty：「MADE IN」行的國碼（2字母）
+- N_W：淨重。可能不存在。""",
         'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
     },
 }
 
 
+def _load_custom_presets() -> dict:
+    """Load all custom presets from disk."""
+    result = {}
+    for f in CUSTOM_PRESETS_DIR.glob("*.json"):
+        try:
+            with open(f, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            result[data.get("name", f.stem)] = data
+        except Exception:
+            pass
+    return result
+
+
+def _get_all_presets() -> tuple[dict, dict]:
+    """Return (builtin, custom) preset dicts."""
+    return CHECK_PRESETS, _load_custom_presets()
+
+
 def filter_table_pages(reg_list: list, keywords: list[list[str]]) -> list[int]:
-    """Filter pages that contain table data by checking OCR text for keywords.
-    Each keyword group is a list of strings that must ALL appear on the page.
-    A page matches if ANY keyword group is fully matched.
-    """
+    """Filter pages that contain table data by checking OCR text for keywords."""
     result = []
     for i, reg in enumerate(reg_list):
         areas = reg.get("analyzer", {}).get("areaList", [])
@@ -479,36 +500,109 @@ def concat_images_b64(paths: list[Path]) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def build_check_prompt(format_rules: str, columns: str, rows_text: str, skip_columns: list[str] | None = None) -> str:
-    """Build the VLM check-answer prompt."""
-    skip_note = ""
-    if skip_columns:
-        skip_note = f"\n- SKIP these columns (auto-generated, do NOT verify): {', '.join(skip_columns)}"
-    return f"""You are verifying OCR pipeline output against the original document image.
+def build_read_prompt(format_rules: str, columns: str) -> str:
+    """Build VLM prompt for reading table data from image (no comparison)."""
+    return f"""你是文件分析助手。請仔細閱讀圖片中的表格，按照以下格式規則提取每一行資料。
 
-Format rules for this document type:
+格式規則：
 {format_rules}
 
-Columns: {columns}
+欄位：{columns}
 
-The OCR pipeline extracted these rows:
-{rows_text}
+輸出 JSON 陣列，每個元素代表一行：
+[{{"row": 0, "fields": {{"欄位名": "值", ...}}}}, ...]
 
-Compare ONLY the pipeline values against what you actually see in the document image.
+重要規則：
+- 只輸出你在圖片中實際看到的值，不要猜測或補充
+- 如果欄位值為空或不存在，設為空字串 ""
+- row 從 0 開始遞增
+- 只輸出 JSON，不要其他文字"""
 
-Output JSON array. For each row:
-{{"row": ROW_INDEX, "fields": [{{"col": "COLUMN_NAME", "status": "WRONG|MISSING", "expected": "correct value"}}]}}
 
-IMPORTANT rules:
-- ONLY report fields that are genuinely WRONG or MISSING. Omit correct fields.
-- A field is CORRECT if the pipeline value matches the image value in meaning, even if formatting differs slightly (e.g. extra spaces, "1,234.00" vs "1234.00", trailing zeros, comma vs period in thousands).
-- A field is WRONG only if the actual content/digits/letters are different from what the image shows.
-- A field is MISSING only if the image clearly shows a value but the pipeline has it empty.
-- ROW_INDEX must match the exact "Row N" index from the pipeline output above.
-- If a row is entirely correct, include it with empty fields array: {{"row": N, "fields": []}}
-- Do NOT invent values. Only report what you can clearly read from the image.{skip_note}
-- Output ONLY the JSON array, no other text."""
+# --- Preset CRUD ---
 
+@app.get("/api/check-presets")
+async def list_check_presets():
+    """List all check presets (builtin + custom)."""
+    builtin, custom = _get_all_presets()
+    return {"builtin": builtin, "custom": custom}
+
+
+class CustomPresetRequest(BaseModel):
+    name: str
+    formatRules: str = ""
+    columns: str = ""
+    keywords: list = []
+    skipColumns: list = []
+
+
+@app.post("/api/check-presets")
+async def save_custom_preset(body: CustomPresetRequest):
+    """Save a custom preset."""
+    if not body.name.strip():
+        raise HTTPException(400, "Preset name required")
+    if body.name in CHECK_PRESETS:
+        raise HTTPException(400, "Cannot overwrite builtin preset")
+    safe_name = body.name.strip().replace("/", "_").replace("\\", "_")
+    data = {
+        "name": body.name.strip(),
+        "formatRules": body.formatRules,
+        "columns": body.columns,
+        "keywords": body.keywords,
+        "skipColumns": body.skipColumns,
+    }
+    path = CUSTOM_PRESETS_DIR / f"{safe_name}.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return {"saved": body.name}
+
+
+@app.delete("/api/check-presets/{name}")
+async def delete_custom_preset(name: str):
+    """Delete a custom preset."""
+    safe_name = name.strip().replace("/", "_").replace("\\", "_")
+    path = CUSTOM_PRESETS_DIR / f"{safe_name}.json"
+    if not path.exists():
+        raise HTTPException(404, "Custom preset not found")
+    path.unlink()
+    return {"deleted": name}
+
+
+# --- VLM Answers CRUD ---
+
+@app.get("/api/vlm-answers/{ticket_id}")
+async def get_vlm_answers(ticket_id: str):
+    """Get stored VLM answers for a ticket."""
+    path = VLM_ANSWERS_DIR / f"{ticket_id}.json"
+    if not path.exists():
+        raise HTTPException(404, "No VLM answers found")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@app.put("/api/vlm-answers/{ticket_id}")
+async def save_vlm_answers(request: Request, ticket_id: str):
+    """Save/update VLM answers for a ticket."""
+    body = await request.json()
+    import datetime
+    body["updatedAt"] = datetime.datetime.now().isoformat()
+    path = VLM_ANSWERS_DIR / f"{ticket_id}.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(body, f, ensure_ascii=False, indent=2)
+    return {"saved": ticket_id}
+
+
+@app.delete("/api/vlm-answers/{ticket_id}")
+async def delete_vlm_answers(ticket_id: str):
+    """Delete VLM answers for a ticket."""
+    path = VLM_ANSWERS_DIR / f"{ticket_id}.json"
+    if not path.exists():
+        raise HTTPException(404, "No VLM answers found")
+    path.unlink()
+    return {"deleted": ticket_id}
+
+
+# --- VLM Check Answer SSE (read-only mode) ---
 
 class VLMCheckRequest(BaseModel):
     preset: str = ""
@@ -518,7 +612,7 @@ class VLMCheckRequest(BaseModel):
 
 @app.post("/api/tickets/{ticket_id}/vlm-check-answer")
 async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckRequest):
-    """Run VLM-based answer checking via SSE stream."""
+    """Run VLM to read table data from images (no comparison). Saves answers on completion."""
     ip = get_ip(request)
     touch_ip(ip)
     config_path = ip_dir(ip) / ticket_id / "config.json"
@@ -531,8 +625,9 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
     reg_list = data.get("regList", [])
     ticket_dir = ip_dir(ip) / ticket_id
 
-    # Get preset config or custom
-    preset_cfg = CHECK_PRESETS.get(body.preset, {})
+    # Get preset config (builtin or custom)
+    builtin, custom = _get_all_presets()
+    preset_cfg = builtin.get(body.preset, custom.get(body.preset, {}))
     format_rules = body.customRules or preset_cfg.get('formatRules', '')
     columns = body.columns or preset_cfg.get('columns', '')
     keywords = preset_cfg.get('keywords', [])
@@ -541,46 +636,13 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
     if not format_rules or not columns:
         raise HTTPException(400, "Format rules and columns are required")
 
-    # Get integrator table rows
-    raw_integrator = data.get("integrator", {})
-    if isinstance(raw_integrator, list):
-        integrator_list = raw_integrator
-    else:
-        integrator_list = [raw_integrator] if raw_integrator else []
-
-    table_rows = []
-    table_headers = []
-    for integ in integrator_list:
-        for tbl in integ.get("tableList", []):
-            if not table_headers:
-                table_headers = [h.get("key", "") for h in tbl.get("headerList", [])]
-            for row_cells in tbl.get("data", []):
-                row = {}
-                for cell in row_cells:
-                    key = cell.get("key", "")
-                    row[key] = cell.get("textModify", "") or cell.get("text", "")
-                    # Track regNdx for page association
-                    if "regNdx" in cell:
-                        row[f"_regNdx_{key}"] = cell["regNdx"]
-                table_rows.append(row)
-
-    if not table_rows:
-        raise HTTPException(400, "No table data found in ticket")
-
     # Filter table pages using keywords
     if keywords:
         table_pages = filter_table_pages(reg_list, keywords)
     else:
-        # Fallback: use pages that have table data (by regNdx)
-        page_set = set()
-        for row in table_rows:
-            for k, v in row.items():
-                if k.startswith("_regNdx_"):
-                    page_set.add(v)
-        table_pages = sorted(page_set)
+        table_pages = list(range(len(reg_list)))
 
     if not table_pages:
-        # Use all pages as fallback
         table_pages = list(range(len(reg_list)))
 
     # Pair pages: every 2 pages concatenated
@@ -591,24 +653,19 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
         else:
             pairs.append((table_pages[i],))
 
-    # Map rows to page pairs by regNdx
-    def get_row_pages(row):
-        pages = set()
-        for k, v in row.items():
-            if k.startswith("_regNdx_"):
-                pages.add(v)
-        return pages
+    # Build prompt (read-only, no pipeline data)
+    col_list = [c.strip() for c in columns.split(",")]
+    check_cols = [c for c in col_list if c not in skip_columns]
+    prompt = build_read_prompt(format_rules, ", ".join(check_cols))
 
     async def event_stream():
         t0 = time.time()
-        yield f"data: {json.dumps({'event': 'init', 'totalPairs': len(pairs), 'tablePages': table_pages, 'totalRows': len(table_rows), 'skipColumns': skip_columns})}\n\n"
+        yield f"data: {json.dumps({'event': 'init', 'totalPairs': len(pairs), 'tablePages': table_pages})}\n\n"
 
-        all_results = []
+        all_rows = []
 
         async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
             for pi, pair in enumerate(pairs):
-                pair_t0 = time.time()
-
                 # Get image paths for this pair
                 img_paths = []
                 for page_idx in pair:
@@ -621,53 +678,16 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
                                 img_paths.append(img_path)
 
                 if not img_paths:
-                    all_results.append({"pairIndex": pi, "pages": list(pair), "rows": []})
                     elapsed = round(time.time() - t0, 1)
-                    yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairResults': []})}\n\n"
+                    yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairRows': []})}\n\n"
                     continue
 
-                # Concatenate images
                 img_b64 = concat_images_b64(img_paths)
                 if not img_b64:
                     continue
 
-                # Find rows belonging to this pair's pages
-                pair_page_set = set(pair)
-                pair_rows = []
-                pair_row_indices = []
-                for ri, row in enumerate(table_rows):
-                    row_pages = get_row_pages(row)
-                    if row_pages & pair_page_set or not row_pages:
-                        pair_rows.append(row)
-                        pair_row_indices.append(ri)
-
-                if not pair_rows:
-                    all_results.append({"pairIndex": pi, "pages": list(pair), "rows": []})
-                    elapsed = round(time.time() - t0, 1)
-                    yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairResults': []})}\n\n"
-                    continue
-
-                # Build rows text (exclude skip columns)
-                col_list = [c.strip() for c in columns.split(",")]
-                check_cols = [c for c in col_list if c not in skip_columns]
-                rows_text = ""
-                for i, row in enumerate(pair_rows):
-                    vals = []
-                    for c in check_cols:
-                        # Try exact key match, then case-insensitive
-                        val = row.get(c, "")
-                        if not val:
-                            for k, v in row.items():
-                                if not k.startswith("_regNdx_") and k.lower() == c.lower():
-                                    val = v
-                                    break
-                        vals.append(f"{c}={val}" if val else f"{c}=")
-                    rows_text += f"Row {pair_row_indices[i]}: {', '.join(vals)}\n"
-
-                # Build prompt
-                prompt = build_check_prompt(format_rules, columns, rows_text, skip_columns)
-
                 # Call VLM
+                pair_rows = []
                 try:
                     resp = await client.post(VLM_URL, json={
                         "model": VLM_MODEL,
@@ -681,28 +701,45 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
                     resp.raise_for_status()
                     content = resp.json()["choices"][0]["message"]["content"]
 
-                    # Parse JSON response
+                    # Parse JSON
                     js = content
                     if "```json" in content:
                         js = content.split("```json")[1].split("```")[0]
                     elif "```" in content:
                         js = content.split("```")[1].split("```")[0]
                     parsed = json.loads(js.strip())
-
-                    # Normalize: ensure it's a list
                     if not isinstance(parsed, list):
                         parsed = [parsed]
 
-                    pair_results = parsed
+                    for item in parsed:
+                        fields = item.get("fields", item)
+                        if isinstance(fields, dict):
+                            pair_rows.append(fields)
                 except Exception as e:
-                    pair_results = [{"error": str(e)}]
+                    pair_rows = [{"_error": str(e)}]
 
-                all_results.append({"pairIndex": pi, "pages": list(pair), "results": pair_results})
+                all_rows.extend(pair_rows)
                 elapsed = round(time.time() - t0, 1)
-                yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairResults': pair_results})}\n\n"
+                yield f"data: {json.dumps({'event': 'progress', 'pairIndex': pi, 'totalPairs': len(pairs), 'elapsed': elapsed, 'pairRows': pair_rows})}\n\n"
 
         total_elapsed = round(time.time() - t0, 1)
-        yield f"data: {json.dumps({'event': 'done', 'results': all_results, 'totalElapsed': total_elapsed})}\n\n"
+
+        # Auto-save answers
+        import datetime
+        answer_data = {
+            "ticketId": ticket_id,
+            "columns": columns,
+            "skipColumns": skip_columns,
+            "preset": body.preset,
+            "createdAt": datetime.datetime.now().isoformat(),
+            "updatedAt": datetime.datetime.now().isoformat(),
+            "rows": all_rows,
+        }
+        answer_path = VLM_ANSWERS_DIR / f"{ticket_id}.json"
+        with open(answer_path, "w", encoding="utf-8") as f:
+            json.dump(answer_data, f, ensure_ascii=False, indent=2)
+
+        yield f"data: {json.dumps({'event': 'done', 'rows': all_rows, 'totalElapsed': total_elapsed, 'columns': columns, 'skipColumns': skip_columns})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
