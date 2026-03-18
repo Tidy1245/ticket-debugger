@@ -203,6 +203,16 @@
     .vlm-detail-btn svg { width: 14px; height: 14px; }
     .vlm-highlight { position: absolute; border: 2px solid #8b5cf6; background: rgba(139, 92, 246, 0.12); pointer-events: none; z-index: 8; border-radius: 2px; }
 
+    /* Table-Image Position mode selector */
+    .tip-mode { display: flex; align-items: center; gap: 2px; }
+    .tip-btn { padding: 3px 8px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 11px; font-family: 'Fira Code', monospace; cursor: pointer; transition: all var(--transition); }
+    .tip-btn:first-of-type { border-radius: 4px 0 0 4px; }
+    .tip-btn:last-of-type { border-radius: 0 4px 4px 0; }
+    .tip-btn:not(:first-of-type) { border-left: none; }
+    .tip-btn:hover { color: var(--text-secondary); }
+    .tip-btn.active { background: rgba(245, 158, 11, 0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
+    .row-active td { background: rgba(245, 158, 11, 0.10) !important; }
+
     /* Main content */
     .main {
       flex: 1;
@@ -1105,9 +1115,13 @@
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
                 <input type="checkbox" id="showOcrTexts"> Show OCR Texts
               </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
-                <input type="checkbox" id="tableImgPos"> Table-Image Position
-              </label>
+              <div class="tip-mode" id="tipMode">
+                <span style="font-size:12px;color:var(--text-muted);margin-right:4px;">Position:</span>
+                <button class="tip-btn active" data-mode="off">Off</button>
+                <button class="tip-btn" data-mode="cell">Cell</button>
+                <button class="tip-btn" data-mode="group">Group</button>
+                <button class="tip-btn" data-mode="all">All</button>
+              </div>
               <div style="flex:1;"></div>
               <div class="search-bar">
                 <div class="search-wrap">
@@ -1356,7 +1370,8 @@
       img.style.transformOrigin = '0 0';
 
       renderAreaOverlays();
-      renderCellHighlight();
+      if (tipMode === 'all') renderAllGroupHighlights();
+      else renderCellHighlight();
       renderVLMHighlights();
       updateZoomInfo();
     }
@@ -1401,7 +1416,8 @@
         procImg.onload = () => {
           processorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
           renderAreaOverlays(); // re-render with correct scale
-          renderCellHighlight(); // re-render cell highlight with correct scale
+          if (tipMode === 'all') renderAllGroupHighlights();
+          else renderCellHighlight();
           renderVLMHighlights(); // re-render VLM group highlights with correct scale
           // Scroll to active elements after correct scaling
           requestAnimationFrame(() => {
@@ -1517,14 +1533,19 @@
     // Image controls
     document.getElementById('showAreas').addEventListener('change', () => renderAreaOverlays());
     document.getElementById('showOcrTexts').addEventListener('change', () => renderAreaOverlays());
-    document.getElementById('tableImgPos').addEventListener('change', () => {
-      if (!document.getElementById('tableImgPos').checked) {
-        // Hide cell highlight but keep cell-active in table
+    let tipMode = 'off'; // 'off', 'cell', 'group', 'all'
+    document.querySelectorAll('.tip-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        tipMode = btn.dataset.mode;
+        document.querySelectorAll('.tip-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === tipMode));
         const container = document.getElementById('imageContainer');
         if (container) container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
-      } else {
-        renderCellHighlight();
-      }
+        if (tipMode === 'all') {
+          renderAllGroupHighlights();
+        } else if (tipMode !== 'off') {
+          renderCellHighlight();
+        }
+      });
     });
 
     const viewBtns = ['btnFit', 'btnFitPage'];
@@ -1801,7 +1822,7 @@
           `;
 
           rows.forEach((row, ri) => {
-            html += '<tr>';
+            html += `<tr data-row="${ri}">`;
             headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
               const cell = row[h.key] || {};
               const text = cell.text || '';
@@ -1885,13 +1906,27 @@
       document.querySelectorAll('td.locatable, .area-item.locatable').forEach(el => {
         el.addEventListener('click', () => {
           // Clear previous active
-          document.querySelectorAll('td.cell-active, .area-item.cell-active').forEach(c => c.classList.remove('cell-active'));
-          el.classList.add('cell-active');
-          locateCell(
-            parseInt(el.dataset.rx), parseInt(el.dataset.ry),
-            parseInt(el.dataset.rw), parseInt(el.dataset.rh),
-            parseInt(el.dataset.rp), el.dataset.rk, el.dataset.rt
-          );
+          document.querySelectorAll('td.cell-active, .area-item.cell-active, tr.row-active').forEach(c => c.classList.remove('cell-active', 'row-active'));
+
+          if (tipMode === 'off' || tipMode === 'all') {
+            // Auto-switch to cell mode
+            tipMode = 'cell';
+            document.querySelectorAll('.tip-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell'));
+          }
+
+          if (tipMode === 'group' && el.tagName === 'TD') {
+            // Highlight entire row
+            const tr = el.closest('tr');
+            if (tr) tr.classList.add('row-active');
+            locateRow(tr);
+          } else {
+            el.classList.add('cell-active');
+            locateCell(
+              parseInt(el.dataset.rx), parseInt(el.dataset.ry),
+              parseInt(el.dataset.rw), parseInt(el.dataset.rh),
+              parseInt(el.dataset.rp), el.dataset.rk, el.dataset.rt
+            );
+          }
         });
       });
     }
@@ -1903,8 +1938,11 @@
       cellHighlightData = { x, y, w, h, key, text };
       vlmHighlightAreas = []; vlmActiveGroup = -1;
 
-      // Auto-enable Table-Image Position toggle
-      document.getElementById('tableImgPos').checked = true;
+      // Auto-enable position mode
+      if (tipMode === 'off' || tipMode === 'all') {
+        tipMode = 'cell';
+        document.querySelectorAll('.tip-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell'));
+      }
 
       // Clear OCR search to avoid conflicts
       const ocrInput = document.getElementById('ocrSearchInput');
@@ -1940,7 +1978,7 @@
       const container = document.getElementById('imageContainer');
       container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
       if (!cellHighlightData) return;
-      if (!document.getElementById('tableImgPos').checked) return;
+      if (tipMode === 'off') return;
 
       const img = document.getElementById('pageImg');
       if (!img || !img.naturalWidth) return;
@@ -1957,20 +1995,22 @@
         scaleY = img.naturalHeight / processorImgSize.h;
       }
 
-      const { x, y, w, h, key, text } = cellHighlightData;
-      const div = document.createElement('div');
-      div.className = 'cell-highlight';
-      div.style.left = (padX + x * scaleX * zoomLevel) + 'px';
-      div.style.top = (padY + y * scaleY * zoomLevel) + 'px';
-      div.style.width = (w * scaleX * zoomLevel) + 'px';
-      div.style.height = (h * scaleY * zoomLevel) + 'px';
-
-      const label = document.createElement('span');
-      label.className = 'cell-highlight-label';
-      label.textContent = `${key}: ${text}`;
-      div.appendChild(label);
-
-      container.appendChild(div);
+      const items = cellHighlightData.multi ? cellHighlightData.cells : [cellHighlightData];
+      items.forEach(({ x, y, w, h, key, text }) => {
+        const div = document.createElement('div');
+        div.className = 'cell-highlight';
+        div.style.left = (padX + x * scaleX * zoomLevel) + 'px';
+        div.style.top = (padY + y * scaleY * zoomLevel) + 'px';
+        div.style.width = (w * scaleX * zoomLevel) + 'px';
+        div.style.height = (h * scaleY * zoomLevel) + 'px';
+        if (key || text) {
+          const label = document.createElement('span');
+          label.className = 'cell-highlight-label';
+          label.textContent = `${key}: ${text}`;
+          div.appendChild(label);
+        }
+        container.appendChild(div);
+      });
     }
 
     function scrollToCellHighlight() {
@@ -1979,6 +2019,102 @@
       const left = parseInt(hl.style.left) - imageViewport.clientWidth / 2 + parseInt(hl.style.width) / 2;
       const top = parseInt(hl.style.top) - imageViewport.clientHeight / 2 + parseInt(hl.style.height) / 2;
       imageViewport.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: 'smooth' });
+    }
+
+    // Group mode: highlight all cells in a row
+    async function locateRow(tr) {
+      if (!tr) return;
+      const cells = [...tr.querySelectorAll('td.locatable')];
+      if (!cells.length) return;
+      const firstCell = cells[0];
+      const pageIdx = parseInt(firstCell.dataset.rp);
+
+      // Collect all cell positions for this row
+      cellHighlightData = null;
+      vlmHighlightAreas = []; vlmActiveGroup = -1;
+
+      const rowCells = cells.map(c => ({
+        x: parseInt(c.dataset.rx), y: parseInt(c.dataset.ry),
+        w: parseInt(c.dataset.rw), h: parseInt(c.dataset.rh),
+        text: c.dataset.rt || '', key: c.dataset.rk || ''
+      }));
+
+      // Store as multi-cell highlight
+      cellHighlightData = { multi: true, cells: rowCells };
+
+      // Clear OCR search
+      const ocrInput = document.getElementById('ocrSearchInput');
+      if (ocrInput.value) {
+        ocrInput.value = '';
+        ocrSearchResults = [];
+        ocrSearchCurrent = -1;
+        document.getElementById('ocrSearchInfo').textContent = '';
+      }
+
+      // Switch to Images tab
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelector('.tab[data-tab="images"]').classList.add('active');
+      document.getElementById('panelImages').classList.add('active');
+
+      if (pageIdx !== currentPageIndex) {
+        currentPageIndex = pageIdx;
+        renderPageNav();
+        await loadPageImage();
+      } else {
+        renderAreaOverlays();
+        renderCellHighlight();
+      }
+      requestAnimationFrame(() => scrollToCellHighlight());
+    }
+
+    // All groups mode: highlight all table rows with different colors
+    const GROUP_COLORS = [
+      'rgba(245,158,11,0.25)', 'rgba(59,130,246,0.25)', 'rgba(16,185,129,0.25)',
+      'rgba(239,68,68,0.25)', 'rgba(139,92,246,0.25)', 'rgba(236,72,153,0.25)',
+      'rgba(6,182,212,0.25)', 'rgba(251,191,36,0.25)', 'rgba(99,102,241,0.25)',
+    ];
+    const GROUP_BORDERS = [
+      '#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6',
+      '#ec4899', '#06b6d4', '#fbbf24', '#6366f1',
+    ];
+
+    function renderAllGroupHighlights() {
+      const container = document.getElementById('imageContainer');
+      container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
+
+      const img = document.getElementById('pageImg');
+      if (!img || !img.naturalWidth) return;
+      const vw = imageViewport.clientWidth;
+      const vh = imageViewport.clientHeight;
+      const scaledW = img.naturalWidth * zoomLevel;
+      const scaledH = img.naturalHeight * zoomLevel;
+      const padX = Math.max(0, (vw - scaledW) / 2);
+      const padY = Math.max(0, (vh - scaledH) / 2);
+      let scaleX = 1, scaleY = 1;
+      if (processorImgSize) {
+        scaleX = img.naturalWidth / processorImgSize.w;
+        scaleY = img.naturalHeight / processorImgSize.h;
+      }
+
+      // Collect all rows from current table
+      const tableRows = document.querySelectorAll('#tableContent table tbody tr[data-row]');
+      tableRows.forEach((tr, ri) => {
+        const color = GROUP_COLORS[ri % GROUP_COLORS.length];
+        const border = GROUP_BORDERS[ri % GROUP_BORDERS.length];
+        tr.querySelectorAll('td.locatable').forEach(td => {
+          if (parseInt(td.dataset.rp) !== currentPageIndex) return;
+          const div = document.createElement('div');
+          div.className = 'cell-highlight';
+          div.style.left = (padX + parseInt(td.dataset.rx) * scaleX * zoomLevel) + 'px';
+          div.style.top = (padY + parseInt(td.dataset.ry) * scaleY * zoomLevel) + 'px';
+          div.style.width = (parseInt(td.dataset.rw) * scaleX * zoomLevel) + 'px';
+          div.style.height = (parseInt(td.dataset.rh) * scaleY * zoomLevel) + 'px';
+          div.style.borderColor = border;
+          div.style.background = color;
+          container.appendChild(div);
+        });
+      });
     }
 
     function escHtml(s) {
