@@ -1249,7 +1249,7 @@
       tableSearchQuery = '';
       cellHighlightData = null;
       vlmResult = null; vlmActiveGroup = -1; vlmHighlightAreas = [];
-      vlmAnswers = null; checkLoading = false; checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 }; checkCompareResult = null;
+      vlmAnswers = null; vlmAnswersList = []; checkLoading = false; checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 }; checkCompareResult = null;
       document.getElementById('ocrSearchInput').value = '';
       document.getElementById('ocrSearchInfo').textContent = '';
       // tableSearchInput is dynamically rendered in renderTable(), no need to clear here
@@ -1271,7 +1271,7 @@
       renderTable();
       renderVLMPanel();
       await loadCheckPresets();
-      await loadVlmAnswers();
+      await loadVlmAnswersList();
       renderCheckPanel();
       loadPageImage();
     }
@@ -2508,19 +2508,24 @@
     }
 
     // --- VLM Check Answer ---
-    let vlmAnswers = null;       // { rows: [{col: val, ...}, ...], columns, skipColumns, ... }
+    let vlmAnswers = null;       // { name, rows: [{col: val, ...}, ...], columns, skipColumns, ... }
+    let vlmAnswersList = [];     // list of all saved answer sets
     let checkLoading = false;
     let checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
     let checkPresets = { builtin: {}, custom: {} };
-    let checkCompareResult = null; // comparison results array
+    let checkCompareResult = null;
 
     async function loadCheckPresets() {
       try { checkPresets = await fetchJSON('/api/check-presets'); } catch {}
     }
 
-    async function loadVlmAnswers() {
-      if (!currentTicket) return;
-      try { vlmAnswers = await fetchJSON(`/api/vlm-answers/${currentTicket}`); } catch { vlmAnswers = null; }
+    async function loadVlmAnswersList() {
+      try { vlmAnswersList = await fetchJSON('/api/vlm-answers'); } catch { vlmAnswersList = []; }
+    }
+
+    async function loadVlmAnswersByName(name) {
+      if (!name) { vlmAnswers = null; return; }
+      try { vlmAnswers = await fetchJSON(`/api/vlm-answers/${encodeURIComponent(name)}`); } catch { vlmAnswers = null; }
     }
 
     // --- String diff utilities ---
@@ -2620,21 +2625,15 @@
       // === Section A: Configuration ===
       html += '<div class="check-config"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>Step 1: VLM 讀取設定</div>';
 
-      // Preset selector with save/delete
+      // Preset: editable input + datalist
       html += '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;">';
-      html += '<div class="vlm-field" style="flex:1;"><label>Preset</label><select id="checkPreset"><option value="">— 無 —</option>';
-      if (checkPresets.builtin) {
-        html += '<optgroup label="內建">';
-        Object.keys(checkPresets.builtin).forEach(k => { html += `<option value="${k}">${k}</option>`; });
-        html += '</optgroup>';
-      }
-      if (checkPresets.custom && Object.keys(checkPresets.custom).length) {
-        html += '<optgroup label="自訂">';
-        Object.keys(checkPresets.custom).forEach(k => { html += `<option value="custom:${k}">${k}</option>`; });
-        html += '</optgroup>';
-      }
-      html += '</select></div>';
-      html += '<button class="vlm-detail-btn" id="presetSaveBtn" title="儲存目前設定為自訂 Preset" style="height:30px;font-size:11px;">儲存 Preset</button>';
+      html += '<div class="vlm-field" style="flex:1;"><label>Preset（可輸入新名稱儲存）</label>';
+      html += '<input type="text" id="checkPreset" list="presetList" placeholder="選擇或輸入 Preset 名稱...">';
+      html += '<datalist id="presetList">';
+      if (checkPresets.builtin) Object.keys(checkPresets.builtin).forEach(k => { html += `<option value="${k}">`; });
+      if (checkPresets.custom) Object.keys(checkPresets.custom).forEach(k => { html += `<option value="${k}">`; });
+      html += '</datalist></div>';
+      html += '<button class="vlm-detail-btn" id="presetSaveBtn" title="以目前輸入的名稱儲存 Preset" style="height:30px;font-size:11px;">儲存</button>';
       html += '<button class="vlm-detail-btn" id="presetDeleteBtn" title="刪除選中的自訂 Preset" style="height:30px;font-size:11px;color:var(--accent-red);">刪除</button>';
       html += '</div>';
 
@@ -2659,10 +2658,18 @@
       }
 
       // === Section B: VLM Answers ===
-      html += '<div class="check-config" style="margin-top:16px;"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>VLM 答案';
+      html += '<div class="check-config" style="margin-top:16px;"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>VLM 答案</div>';
+
+      // Answer selector dropdown
+      html += '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;">';
+      html += '<div class="vlm-field" style="flex:1;"><label>已儲存答案</label><select id="vlmAnswerSelect"><option value="">— 選擇答案 —</option>';
+      vlmAnswersList.forEach(a => {
+        const sel = vlmAnswers && vlmAnswers.name === a.name ? ' selected' : '';
+        html += `<option value="${escHtml(a.name)}"${sel}>${escHtml(a.name)} (${a.rowCount} rows)</option>`;
+      });
+      html += '</select></div>';
       if (vlmAnswers) {
-        const ts = vlmAnswers.updatedAt ? new Date(vlmAnswers.updatedAt).toLocaleString() : '';
-        html += `<span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:12px;">${vlmAnswers.preset ? vlmAnswers.preset + ' | ' : ''}${ts}</span>`;
+        html += '<div class="vlm-field" style="width:200px;"><label>儲存名稱</label><input type="text" id="vlmAnswerName" value="' + escHtml(vlmAnswers.name || '') + '"></div>';
       }
       html += '</div>';
 
@@ -2676,7 +2683,7 @@
         colKeys.forEach(col => { html += `<th>${escHtml(col)}</th>`; });
         html += '</tr></thead><tbody>';
         vlmAnswers.rows.forEach((row, ri) => {
-          html += `<tr>`;
+          html += '<tr>';
           html += `<td style="color:var(--text-muted);">${ri}</td>`;
           colKeys.forEach(col => {
             const val = row[col] || '';
@@ -2691,16 +2698,18 @@
         html += '<button class="vlm-detail-btn" id="vlmDeleteBtn" style="color:var(--accent-red);">刪除答案</button>';
         html += '</div>';
       } else if (!checkLoading) {
-        html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">尚無 VLM 答案。請先執行 VLM 讀取。</p>';
+        html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">尚無 VLM 答案。請先執行 VLM 讀取或從下拉選單載入。</p>';
       }
       html += '</div>';
 
       // === Section C: Comparison Results ===
-      html += '<div class="check-config" style="margin-top:16px;"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Step 2: 比對結果';
-      html += `<button class="vlm-detail-btn" id="checkCompareBtn" style="margin-left:auto;height:26px;font-size:11px;" ${vlmAnswers ? '' : 'disabled'}>執行比對</button>`;
-      html += '</div>';
-
+      html += '<div class="check-config" style="margin-top:16px;">';
       if (checkCompareResult) {
+        // Has results: title with re-compare button at top-right
+        html += '<div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Step 2: 比對結果';
+        html += `<button class="vlm-detail-btn" id="checkCompareBtn" style="margin-left:auto;height:26px;font-size:11px;">重新比對</button>`;
+        html += '</div>';
+
         const cr = checkCompareResult;
         html += '<div class="check-summary">';
         html += `<span class="check-stat check-stat-correct">${cr.matchCount} 正確</span>`;
@@ -2715,7 +2724,6 @@
 
         cr.results.forEach(rowResult => {
           const ri = rowResult.row;
-          // Row 1: Pipeline
           html += `<tr><td style="color:var(--text-muted);" rowspan="2">${ri}</td>`;
           rowResult.cells.forEach(c => {
             if (c.status === 'match') {
@@ -2723,15 +2731,11 @@
             } else if (c.status === 'missing') {
               html += `<td class="check-row-pipeline" style="color:var(--text-muted);font-style:italic;">（空）</td>`;
             } else {
-              // wrong — show diff
               const diffHtml = renderDiffHtml(c.normA, c.aMatch, 'check-diff-highlight');
               html += `<td class="check-row-pipeline">${diffHtml}</td>`;
             }
           });
-          html += '</tr>';
-
-          // Row 2: VLM
-          html += '<tr>';
+          html += '</tr><tr>';
           rowResult.cells.forEach(c => {
             if (c.status === 'match') {
               html += `<td class="check-row-vlm">${escHtml(c.vVal)}</td>`;
@@ -2747,7 +2751,9 @@
 
         html += '</tbody></table></div>';
       } else {
-        html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">有 VLM 答案後，點擊「執行比對」查看差異</p>';
+        // No results: centered button
+        html += '<div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Step 2: 比對結果</div>';
+        html += `<div style="text-align:center;padding:24px 0;"><button class="vlm-btn" id="checkCompareBtn" style="background:linear-gradient(135deg, #10b981, #059669);box-shadow:0 0 12px rgba(16,185,129,0.3);" ${vlmAnswers ? '' : 'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>執行比對</button></div>`;
       }
       html += '</div>';
 
@@ -2757,20 +2763,24 @@
       document.getElementById('checkRunBtn')?.addEventListener('click', startCheckAnswer);
       document.getElementById('checkCompareBtn')?.addEventListener('click', () => { runComparison(); renderCheckPanel(); });
 
-      // Preset change
-      document.getElementById('checkPreset')?.addEventListener('change', (e) => {
-        const val = e.target.value;
-        let p;
-        if (val.startsWith('custom:')) p = checkPresets.custom[val.slice(7)] || {};
-        else p = checkPresets.builtin[val] || {};
-        if (document.getElementById('checkRules')) document.getElementById('checkRules').value = p.formatRules || '';
-        if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = p.columns || '';
-      });
+      // Preset input: load preset on selection from datalist
+      const presetInput = document.getElementById('checkPreset');
+      if (presetInput) {
+        presetInput.addEventListener('input', () => {
+          const val = presetInput.value;
+          const p = checkPresets.builtin[val] || checkPresets.custom[val];
+          if (p) {
+            if (document.getElementById('checkRules')) document.getElementById('checkRules').value = p.formatRules || '';
+            if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = p.columns || '';
+          }
+        });
+      }
 
-      // Save preset
+      // Save preset: use the text in the preset input as name
       document.getElementById('presetSaveBtn')?.addEventListener('click', async () => {
-        const name = prompt('輸入 Preset 名稱：');
-        if (!name) return;
+        const name = document.getElementById('checkPreset')?.value?.trim();
+        if (!name) { alert('請輸入 Preset 名稱'); return; }
+        if (checkPresets.builtin[name]) { alert('無法覆寫內建 Preset，請使用其他名稱'); return; }
         const rules = document.getElementById('checkRules')?.value || '';
         const cols = document.getElementById('checkColumns')?.value || '';
         try {
@@ -2780,15 +2790,19 @@
           });
           await loadCheckPresets();
           renderCheckPanel();
+          // Restore preset input
+          const pi = document.getElementById('checkPreset');
+          if (pi) pi.value = name;
         } catch (e) { alert('儲存失敗: ' + e.message); }
       });
 
       // Delete preset
       document.getElementById('presetDeleteBtn')?.addEventListener('click', async () => {
-        const val = document.getElementById('checkPreset')?.value || '';
-        if (!val.startsWith('custom:')) { alert('只能刪除自訂 Preset'); return; }
-        const name = val.slice(7);
-        if (!confirm(`確定刪除自訂 Preset "${name}"？`)) return;
+        const name = document.getElementById('checkPreset')?.value?.trim();
+        if (!name) return;
+        if (checkPresets.builtin[name]) { alert('無法刪除內建 Preset'); return; }
+        if (!checkPresets.custom[name]) { alert('找不到此自訂 Preset'); return; }
+        if (!confirm(`確定刪除自訂 Preset「${name}」？`)) return;
         try {
           await fetch(`/api/check-presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
           await loadCheckPresets();
@@ -2796,31 +2810,55 @@
         } catch (e) { alert('刪除失敗: ' + e.message); }
       });
 
-      // VLM answer save
+      // VLM answer select
+      document.getElementById('vlmAnswerSelect')?.addEventListener('change', async (e) => {
+        const name = e.target.value;
+        if (name) {
+          await loadVlmAnswersByName(name);
+          checkCompareResult = null;
+        } else {
+          vlmAnswers = null;
+          checkCompareResult = null;
+        }
+        renderCheckPanel();
+      });
+
+      // VLM answer save (with name)
       document.getElementById('vlmSaveBtn')?.addEventListener('click', async () => {
-        if (!vlmAnswers || !currentTicket) return;
-        // Collect edited values from contenteditable cells
+        if (!vlmAnswers) return;
+        const nameInput = document.getElementById('vlmAnswerName');
+        const newName = nameInput?.value?.trim() || vlmAnswers.name;
+        if (!newName) { alert('請輸入儲存名稱'); return; }
+        // Collect edited values
         document.querySelectorAll('.vlm-editable').forEach(td => {
           const ri = parseInt(td.dataset.row);
           const col = td.dataset.col;
           if (vlmAnswers.rows[ri]) vlmAnswers.rows[ri][col] = td.textContent;
         });
+        // If name changed, delete old one
+        const oldName = vlmAnswers.name;
+        vlmAnswers.name = newName;
         try {
-          await fetch(`/api/vlm-answers/${currentTicket}`, {
+          await fetch(`/api/vlm-answers/${encodeURIComponent(newName)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(vlmAnswers),
           });
-          alert('答案已儲存');
+          if (oldName && oldName !== newName) {
+            await fetch(`/api/vlm-answers/${encodeURIComponent(oldName)}`, { method: 'DELETE' }).catch(() => {});
+          }
+          await loadVlmAnswersList();
+          renderCheckPanel();
         } catch (e) { alert('儲存失敗: ' + e.message); }
       });
 
       // VLM answer delete
       document.getElementById('vlmDeleteBtn')?.addEventListener('click', async () => {
-        if (!currentTicket || !confirm('確定刪除 VLM 答案？')) return;
+        if (!vlmAnswers?.name || !confirm(`確定刪除答案「${vlmAnswers.name}」？`)) return;
         try {
-          await fetch(`/api/vlm-answers/${currentTicket}`, { method: 'DELETE' });
+          await fetch(`/api/vlm-answers/${encodeURIComponent(vlmAnswers.name)}`, { method: 'DELETE' });
           vlmAnswers = null;
           checkCompareResult = null;
+          await loadVlmAnswersList();
           renderCheckPanel();
         } catch (e) { alert('刪除失敗: ' + e.message); }
       });
@@ -2834,8 +2872,7 @@
       checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
 
       // Save input values
-      const preset = document.getElementById('checkPreset')?.value || '';
-      const actualPreset = preset.startsWith('custom:') ? preset.slice(7) : preset;
+      const preset = document.getElementById('checkPreset')?.value?.trim() || '';
       const customRules = document.getElementById('checkRules')?.value || '';
       const columns = document.getElementById('checkColumns')?.value || '';
 
@@ -2852,7 +2889,7 @@
         const response = await fetch(`/api/tickets/${currentTicket}/vlm-check-answer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ preset: actualPreset, customRules, columns }),
+          body: JSON.stringify({ preset, customRules, columns }),
         });
 
         if (!response.ok) {
@@ -2885,7 +2922,8 @@
                 renderCheckPanel(); restoreForm();
               } else if (data.event === 'done') {
                 // Reload saved answers from server
-                await loadVlmAnswers();
+                await loadVlmAnswersList();
+                if (data.answerName) await loadVlmAnswersByName(data.answerName);
               }
             } catch {}
           }
@@ -3177,7 +3215,7 @@
           renderPageNav();
           renderTable();
           renderVLMPanel();
-          await loadVlmAnswers();
+          await loadVlmAnswersList();
           renderCheckPanel();
           loadPageImage();
         }

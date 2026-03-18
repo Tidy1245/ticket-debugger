@@ -385,7 +385,7 @@ VLM_ANSWERS_DIR.mkdir(parents=True, exist_ok=True)
 CUSTOM_PRESETS_DIR.mkdir(parents=True, exist_ok=True)
 
 CHECK_PRESETS = {
-    'BVLGARI': {
+    'BVLGARI 進口': {
         'keywords': [['Tva', 'Code'], ['Country of origin:'], ['Commodity code:']],
         'skipColumns': ['Item_No'],
         'formatRules': """BVLGARI 進口發票：
@@ -400,7 +400,7 @@ CHECK_PRESETS = {
 - N_W：「Net Weight」之後的數字。若單位為公克則除以1000。可能不存在。""",
         'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
     },
-    'LVMH': {
+    'LVMH 進口': {
         'keywords': [['Reference', 'Description'], ['Country of origin'], ['Serial']],
         'skipColumns': ['Item_No'],
         'formatRules': """LVMH 腕錶珠寶進口發票：
@@ -415,7 +415,7 @@ CHECK_PRESETS = {
 - N_W：淨重數字。可能不存在。""",
         'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
     },
-    'BOUCHERON': {
+    'BOUCHERON 進口': {
         'keywords': [['Code', 'Description'], ['Lot Number'], ['Origin']],
         'skipColumns': ['Item_No'],
         'formatRules': """BOUCHERON 進口發票：
@@ -430,7 +430,7 @@ CHECK_PRESETS = {
 - N_W：淨重。可能不存在。""",
         'columns': 'Item_No, Item1, Item2, Item3, U_Price, Qty, Unit, Amount, Mf_Cty, N_W',
     },
-    'LV': {
+    'LV 進口': {
         'keywords': [['MADE IN'], ['Item Code'], ['Reference']],
         'skipColumns': ['Item_No'],
         'formatRules': """Louis Vuitton 進口發票：
@@ -568,38 +568,62 @@ async def delete_custom_preset(name: str):
     return {"deleted": name}
 
 
-# --- VLM Answers CRUD ---
+# --- VLM Answers CRUD (named, global across tickets) ---
 
-@app.get("/api/vlm-answers/{ticket_id}")
-async def get_vlm_answers(ticket_id: str):
-    """Get stored VLM answers for a ticket."""
-    path = VLM_ANSWERS_DIR / f"{ticket_id}.json"
+@app.get("/api/vlm-answers")
+async def list_vlm_answers():
+    """List all saved VLM answer sets."""
+    result = []
+    for f in sorted(VLM_ANSWERS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            with open(f, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            result.append({
+                "name": data.get("name", f.stem),
+                "preset": data.get("preset", ""),
+                "columns": data.get("columns", ""),
+                "rowCount": len(data.get("rows", [])),
+                "updatedAt": data.get("updatedAt", ""),
+            })
+        except Exception:
+            pass
+    return result
+
+
+@app.get("/api/vlm-answers/{name}")
+async def get_vlm_answers(name: str):
+    """Get a named VLM answer set."""
+    safe = name.strip().replace("/", "_").replace("\\", "_")
+    path = VLM_ANSWERS_DIR / f"{safe}.json"
     if not path.exists():
         raise HTTPException(404, "No VLM answers found")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-@app.put("/api/vlm-answers/{ticket_id}")
-async def save_vlm_answers(request: Request, ticket_id: str):
-    """Save/update VLM answers for a ticket."""
+@app.put("/api/vlm-answers/{name}")
+async def save_vlm_answers(request: Request, name: str):
+    """Save/update a named VLM answer set."""
     body = await request.json()
     import datetime
     body["updatedAt"] = datetime.datetime.now().isoformat()
-    path = VLM_ANSWERS_DIR / f"{ticket_id}.json"
+    body["name"] = name
+    safe = name.strip().replace("/", "_").replace("\\", "_")
+    path = VLM_ANSWERS_DIR / f"{safe}.json"
     with open(path, "w", encoding="utf-8") as f:
         json.dump(body, f, ensure_ascii=False, indent=2)
-    return {"saved": ticket_id}
+    return {"saved": name}
 
 
-@app.delete("/api/vlm-answers/{ticket_id}")
-async def delete_vlm_answers(ticket_id: str):
-    """Delete VLM answers for a ticket."""
-    path = VLM_ANSWERS_DIR / f"{ticket_id}.json"
+@app.delete("/api/vlm-answers/{name}")
+async def delete_vlm_answers(name: str):
+    """Delete a named VLM answer set."""
+    safe = name.strip().replace("/", "_").replace("\\", "_")
+    path = VLM_ANSWERS_DIR / f"{safe}.json"
     if not path.exists():
         raise HTTPException(404, "No VLM answers found")
     path.unlink()
-    return {"deleted": ticket_id}
+    return {"deleted": name}
 
 
 # --- VLM Check Answer SSE (read-only mode) ---
@@ -724,9 +748,12 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
 
         total_elapsed = round(time.time() - t0, 1)
 
-        # Auto-save answers
+        # Auto-save answers with default name: preset_YYYYMMDD_HHMMSS
         import datetime
+        now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"{body.preset}_{now_str}" if body.preset else f"VLM_{now_str}"
         answer_data = {
+            "name": default_name,
             "ticketId": ticket_id,
             "columns": columns,
             "skipColumns": skip_columns,
@@ -735,11 +762,12 @@ async def vlm_check_answer(request: Request, ticket_id: str, body: VLMCheckReque
             "updatedAt": datetime.datetime.now().isoformat(),
             "rows": all_rows,
         }
-        answer_path = VLM_ANSWERS_DIR / f"{ticket_id}.json"
+        safe_name = default_name.replace("/", "_").replace("\\", "_")
+        answer_path = VLM_ANSWERS_DIR / f"{safe_name}.json"
         with open(answer_path, "w", encoding="utf-8") as f:
             json.dump(answer_data, f, ensure_ascii=False, indent=2)
 
-        yield f"data: {json.dumps({'event': 'done', 'rows': all_rows, 'totalElapsed': total_elapsed, 'columns': columns, 'skipColumns': skip_columns})}\n\n"
+        yield f"data: {json.dumps({'event': 'done', 'rows': all_rows, 'totalElapsed': total_elapsed, 'columns': columns, 'skipColumns': skip_columns, 'answerName': default_name})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
