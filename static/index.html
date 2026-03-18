@@ -216,7 +216,7 @@
     .check-result-table td[contenteditable] { cursor: text; }
     .check-result-table td[contenteditable]:focus { outline: 1px solid var(--accent-amber); background: rgba(245, 158, 11, 0.06); }
     .check-row-pipeline { color: var(--accent-green); }
-    .check-row-vlm { color: #86efac; }
+    .check-row-vlm { color: #86efac; border-bottom: 2px solid var(--border) !important; }
     .check-diff-highlight { background: rgba(239, 68, 68, 0.35); border-radius: 2px; padding: 0 1px; color: var(--accent-red); }
     .check-diff-vlm { background: rgba(134, 239, 172, 0.2); border-radius: 2px; padding: 0 1px; }
     .check-missing-cell { background: rgba(245, 158, 11, 0.1); }
@@ -2625,15 +2625,22 @@
       // === Section A: Configuration ===
       html += '<div class="check-config"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>Step 1: VLM 讀取設定</div>';
 
-      // Preset: editable input + datalist
+      // Preset: select dropdown + name input + save/delete
       html += '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;">';
-      html += '<div class="vlm-field" style="flex:1;"><label>Preset（可輸入新名稱儲存）</label>';
-      html += '<input type="text" id="checkPreset" list="presetList" placeholder="選擇或輸入 Preset 名稱...">';
-      html += '<datalist id="presetList">';
-      if (checkPresets.builtin) Object.keys(checkPresets.builtin).forEach(k => { html += `<option value="${k}">`; });
-      if (checkPresets.custom) Object.keys(checkPresets.custom).forEach(k => { html += `<option value="${k}">`; });
-      html += '</datalist></div>';
-      html += '<button class="vlm-detail-btn" id="presetSaveBtn" title="以目前輸入的名稱儲存 Preset" style="height:30px;font-size:11px;">儲存</button>';
+      html += '<div class="vlm-field" style="flex:3;"><label>Preset</label><select id="checkPresetSelect"><option value="">— 無 —</option>';
+      if (checkPresets.builtin) {
+        html += '<optgroup label="內建">';
+        Object.keys(checkPresets.builtin).forEach(k => { html += `<option value="${k}">${k}</option>`; });
+        html += '</optgroup>';
+      }
+      if (checkPresets.custom && Object.keys(checkPresets.custom).length) {
+        html += '<optgroup label="自訂">';
+        Object.keys(checkPresets.custom).forEach(k => { html += `<option value="${k}">${k}</option>`; });
+        html += '</optgroup>';
+      }
+      html += '</select></div>';
+      html += '<div class="vlm-field" style="flex:1;"><label>儲存名稱</label><input type="text" id="checkPresetName" placeholder="輸入名稱..."></div>';
+      html += '<button class="vlm-detail-btn" id="presetSaveBtn" title="儲存目前設定為自訂 Preset" style="height:30px;font-size:11px;border-color:var(--accent-green);color:var(--accent-green);">儲存</button>';
       html += '<button class="vlm-detail-btn" id="presetDeleteBtn" title="刪除選中的自訂 Preset" style="height:30px;font-size:11px;color:var(--accent-red);">刪除</button>';
       html += '</div>';
 
@@ -2662,14 +2669,14 @@
 
       // Answer selector dropdown
       html += '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;">';
-      html += '<div class="vlm-field" style="flex:1;"><label>已儲存答案</label><select id="vlmAnswerSelect"><option value="">— 選擇答案 —</option>';
+      html += '<div class="vlm-field" style="flex:3;"><label>已儲存答案</label><select id="vlmAnswerSelect"><option value="">— 選擇答案 —</option>';
       vlmAnswersList.forEach(a => {
         const sel = vlmAnswers && vlmAnswers.name === a.name ? ' selected' : '';
         html += `<option value="${escHtml(a.name)}"${sel}>${escHtml(a.name)} (${a.rowCount} rows)</option>`;
       });
       html += '</select></div>';
       if (vlmAnswers) {
-        html += '<div class="vlm-field" style="width:200px;"><label>儲存名稱</label><input type="text" id="vlmAnswerName" value="' + escHtml(vlmAnswers.name || '') + '"></div>';
+        html += '<div class="vlm-field" style="flex:1;"><label>儲存名稱</label><input type="text" id="vlmAnswerName" value="' + escHtml(vlmAnswers.name || '') + '"></div>';
       }
       html += '</div>';
 
@@ -2694,7 +2701,7 @@
         html += '</tbody></table></div>';
 
         html += '<div style="display:flex;gap:8px;">';
-        html += '<button class="vlm-detail-btn" id="vlmSaveBtn">儲存答案</button>';
+        html += '<button class="vlm-detail-btn" id="vlmSaveBtn" style="border-color:var(--accent-green);color:var(--accent-green);">儲存答案</button>';
         html += '<button class="vlm-detail-btn" id="vlmDeleteBtn" style="color:var(--accent-red);">刪除答案</button>';
         html += '</div>';
       } else if (!checkLoading) {
@@ -2763,22 +2770,22 @@
       document.getElementById('checkRunBtn')?.addEventListener('click', startCheckAnswer);
       document.getElementById('checkCompareBtn')?.addEventListener('click', () => { runComparison(); renderCheckPanel(); });
 
-      // Preset input: load preset on selection from datalist
-      const presetInput = document.getElementById('checkPreset');
-      if (presetInput) {
-        presetInput.addEventListener('input', () => {
-          const val = presetInput.value;
-          const p = checkPresets.builtin[val] || checkPresets.custom[val];
-          if (p) {
-            if (document.getElementById('checkRules')) document.getElementById('checkRules').value = p.formatRules || '';
-            if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = p.columns || '';
-          }
-        });
-      }
+      // Preset select: load preset on change
+      document.getElementById('checkPresetSelect')?.addEventListener('change', (e) => {
+        const val = e.target.value;
+        const p = checkPresets.builtin[val] || checkPresets.custom[val];
+        if (p) {
+          if (document.getElementById('checkRules')) document.getElementById('checkRules').value = p.formatRules || '';
+          if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = p.columns || '';
+          // Auto-fill name field with selected preset name
+          const nameInput = document.getElementById('checkPresetName');
+          if (nameInput) nameInput.value = val;
+        }
+      });
 
-      // Save preset: use the text in the preset input as name
+      // Save preset: use the name input field
       document.getElementById('presetSaveBtn')?.addEventListener('click', async () => {
-        const name = document.getElementById('checkPreset')?.value?.trim();
+        const name = document.getElementById('checkPresetName')?.value?.trim();
         if (!name) { alert('請輸入 Preset 名稱'); return; }
         if (checkPresets.builtin[name]) { alert('無法覆寫內建 Preset，請使用其他名稱'); return; }
         const rules = document.getElementById('checkRules')?.value || '';
@@ -2790,15 +2797,12 @@
           });
           await loadCheckPresets();
           renderCheckPanel();
-          // Restore preset input
-          const pi = document.getElementById('checkPreset');
-          if (pi) pi.value = name;
         } catch (e) { alert('儲存失敗: ' + e.message); }
       });
 
-      // Delete preset
+      // Delete preset: use currently selected value from dropdown
       document.getElementById('presetDeleteBtn')?.addEventListener('click', async () => {
-        const name = document.getElementById('checkPreset')?.value?.trim();
+        const name = document.getElementById('checkPresetSelect')?.value?.trim();
         if (!name) return;
         if (checkPresets.builtin[name]) { alert('無法刪除內建 Preset'); return; }
         if (!checkPresets.custom[name]) { alert('找不到此自訂 Preset'); return; }
@@ -2872,14 +2876,14 @@
       checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
 
       // Save input values
-      const preset = document.getElementById('checkPreset')?.value?.trim() || '';
+      const preset = document.getElementById('checkPresetSelect')?.value?.trim() || '';
       const customRules = document.getElementById('checkRules')?.value || '';
       const columns = document.getElementById('checkColumns')?.value || '';
 
       renderCheckPanel();
       // Restore form values after re-render
       const restoreForm = () => {
-        if (document.getElementById('checkPreset')) document.getElementById('checkPreset').value = preset;
+        if (document.getElementById('checkPresetSelect')) document.getElementById('checkPresetSelect').value = preset;
         if (document.getElementById('checkRules')) document.getElementById('checkRules').value = customRules;
         if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = columns;
       };
