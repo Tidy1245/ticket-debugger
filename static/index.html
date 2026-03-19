@@ -1249,7 +1249,9 @@
       tableSearchQuery = '';
       cellHighlightData = null;
       vlmResult = null; vlmActiveGroup = -1; vlmHighlightAreas = [];
-      vlmAnswers = null; vlmAnswersList = []; checkLoading = false; checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 }; checkCompareResult = null;
+      vlmAnswers = null; vlmAnswersList = []; checkCompareResult = null;
+      if (checkAbortController) { checkAbortController.abort(); checkAbortController = null; }
+      checkLoading = false; checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
       document.getElementById('ocrSearchInput').value = '';
       document.getElementById('ocrSearchInfo').textContent = '';
       // tableSearchInput is dynamically rendered in renderTable(), no need to clear here
@@ -2514,6 +2516,7 @@
     let checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
     let checkPresets = { builtin: {}, custom: {} };
     let checkCompareResult = null;
+    let checkAbortController = null; // AbortController for SSE fetch
 
     async function loadCheckPresets() {
       try { checkPresets = await fetchJSON('/api/check-presets'); } catch {}
@@ -2894,6 +2897,12 @@
       checkLoading = true;
       checkCompareResult = null;
       checkProgress = { pairIndex: 0, totalPairs: 0, elapsed: 0 };
+      const startedForTicket = currentTicket; // track which ticket this was started for
+
+      // Abort any previous SSE
+      if (checkAbortController) checkAbortController.abort();
+      checkAbortController = new AbortController();
+      const signal = checkAbortController.signal;
 
       // Save input values
       const preset = document.getElementById('checkPresetSelect')?.value?.trim() || '';
@@ -2901,8 +2910,8 @@
       const columns = document.getElementById('checkColumns')?.value || '';
 
       renderCheckPanel();
-      // Restore form values after re-render
       const restoreForm = () => {
+        if (currentTicket !== startedForTicket) return; // skip if switched away
         if (document.getElementById('checkPresetSelect')) document.getElementById('checkPresetSelect').value = preset;
         if (document.getElementById('checkRules')) document.getElementById('checkRules').value = customRules;
         if (document.getElementById('checkColumns')) document.getElementById('checkColumns').value = columns;
@@ -2910,10 +2919,11 @@
       restoreForm();
 
       try {
-        const response = await fetch(`/api/tickets/${currentTicket}/vlm-check-answer`, {
+        const response = await fetch(`/api/tickets/${startedForTicket}/vlm-check-answer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ preset, customRules, columns }),
+          signal,
         });
 
         if (!response.ok) {
@@ -2928,6 +2938,7 @@
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          if (currentTicket !== startedForTicket) break; // switched ticket, stop processing
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
@@ -2945,7 +2956,6 @@
                 checkProgress.elapsed = data.elapsed;
                 renderCheckPanel(); restoreForm();
               } else if (data.event === 'done') {
-                // Reload saved answers from server
                 await loadVlmAnswersList();
                 if (data.answerName) await loadVlmAnswersByName(data.answerName);
               }
@@ -2953,10 +2963,14 @@
           }
         }
       } catch (e) {
+        if (e.name === 'AbortError') return; // user switched ticket, silently ignore
         alert('VLM 讀取失敗: ' + e.message);
       } finally {
-        checkLoading = false;
-        renderCheckPanel();
+        if (currentTicket === startedForTicket) {
+          checkLoading = false;
+          checkAbortController = null;
+          renderCheckPanel();
+        }
       }
     }
 
