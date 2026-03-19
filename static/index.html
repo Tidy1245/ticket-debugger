@@ -231,6 +231,7 @@
     /* Visual Check */
     .vc-split { display: flex; flex: 1; min-height: 0; }
     .vc-image-side { flex: 1; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
+    .vc-image-toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .vc-image-viewport { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; background: var(--bg-primary); }
     .vc-image-container { position: relative; }
     .vc-image-container img { width: 100%; display: block; }
@@ -252,7 +253,7 @@
     .vc-group-chevron { font-size: 10px; color: var(--text-muted); transition: transform var(--transition); flex-shrink: 0; width: 16px; text-align: center; }
     .vc-group-header.active .vc-group-chevron { transform: rotate(90deg); }
     .vc-group-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 600; flex-shrink: 0; }
-    .vc-group-tag.fields { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .vc-group-tag.fields { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
     .vc-group-tag.row { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
     .vc-group-summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 11px; }
     .vc-group-body { display: none; padding: 0 14px 10px; }
@@ -261,14 +262,16 @@
     .vc-field-item:hover { background: rgba(245, 158, 11, 0.06); }
     .vc-field-item.active { background: rgba(245, 158, 11, 0.12); }
     .vc-field-item:last-child { border-bottom: none; }
-    .vc-field-label { color: var(--text-muted); min-width: 100px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
-    .vc-field-value { color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vc-field-label { color: var(--accent-amber); min-width: 100px; max-width: 140px; flex-shrink: 0; word-break: break-all; }
+    .vc-field-value { color: var(--text-primary); flex: 1; word-break: break-all; }
     .vc-field-value .original { color: var(--accent-red); text-decoration: line-through; margin-right: 6px; font-size: 11px; }
     .vc-field-value .modified-val { color: var(--accent-green); }
     .vc-field-no-loc { opacity: 0.5; cursor: default; }
-    .vc-cross-page { border-color: var(--accent-purple); }
-    .vc-cross-page .vc-group-tag { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
-    .vc-field-item.vc-cross-page-field { border-left: 2px solid var(--accent-purple); padding-left: 6px; }
+    .vc-field-no-loc .vc-field-label { color: rgba(245, 158, 11, 0.4); }
+    .vc-group-header.active + .vc-group-body { background: rgba(245, 158, 11, 0.04); }
+    .vc-cross-page { background: rgba(16, 185, 129, 0.06); }
+    .vc-cross-page .vc-group-tag { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+    .vc-field-item.vc-cross-page-field { background: rgba(16, 185, 129, 0.10); }
 
     /* Table-Image Position mode selector */
     .tip-mode { display: flex; align-items: center; gap: 2px; }
@@ -1228,6 +1231,11 @@
             <div class="vc-page-nav" id="vcPageNav"></div>
             <div class="vc-split">
               <div class="vc-image-side">
+                <div class="vc-image-toolbar">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;font-family:'Fira Code',monospace;">
+                    <input type="checkbox" id="vcShowText"> Show Text
+                  </label>
+                </div>
                 <div class="vc-image-viewport" id="vcImageViewport">
                   <div class="vc-image-container" id="vcImageContainer"></div>
                 </div>
@@ -2321,6 +2329,12 @@
     let vcProcessorImgSize = null;
     let vcActiveHighlight = null;
     let vcActiveGroupIdx = -1;
+    let vcShowText = false;
+
+    document.getElementById('vcShowText').addEventListener('change', (e) => {
+      vcShowText = e.target.checked;
+      vcRenderHighlight();
+    });
 
     function renderVisualCheck() {
       vcPageIndex = 0;
@@ -2442,7 +2456,7 @@
         div.style.top = sy + 'px';
         div.style.width = sw + 'px';
         div.style.height = sh + 'px';
-        if (key || text) {
+        if (vcShowText && (key || text)) {
           const label = document.createElement('span');
           label.className = 'vc-highlight-label';
           label.textContent = `${key}: ${text}`;
