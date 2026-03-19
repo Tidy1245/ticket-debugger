@@ -228,6 +228,52 @@
     .check-stat-missing { background: rgba(136, 136, 168, 0.12); color: var(--text-muted); }
     .vlm-editable { min-width: 40px; }
 
+    /* Visual Check */
+    .vc-split { display: flex; flex: 1; min-height: 0; }
+    .vc-image-side { flex: 1; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
+    .vc-image-viewport { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; background: var(--bg-primary); }
+    .vc-image-container { position: relative; }
+    .vc-image-container img { width: 100%; display: block; }
+    .vc-table-side { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+    .vc-table-content { flex: 1; overflow-y: auto; padding: 12px 16px; }
+    .vc-page-nav { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .vc-page-nav .page-btn { padding: 4px 12px; font-size: 12px; font-family: 'Fira Code', monospace; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; cursor: pointer; transition: all var(--transition); }
+    .vc-page-nav .page-btn:hover:not(:disabled) { border-color: var(--accent-blue); color: var(--accent-blue); }
+    .vc-page-nav .page-btn:disabled { opacity: 0.4; cursor: default; }
+    .vc-page-nav .page-info { font-size: 12px; font-family: 'Fira Code', monospace; color: var(--text-secondary); }
+    .vc-page-nav .page-jump-input { width: 48px; padding: 3px 6px; font-size: 12px; font-family: 'Fira Code', monospace; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; text-align: center; }
+    .vc-view-toggle { display: flex; gap: 2px; padding: 10px 16px 0; flex-shrink: 0; }
+    .vc-view-btn { padding: 5px 14px; font-size: 12px; font-family: 'Fira Code', monospace; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; transition: all var(--transition); }
+    .vc-view-btn:first-child { border-radius: 4px 0 0 4px; }
+    .vc-view-btn:last-child { border-radius: 0 4px 4px 0; }
+    .vc-view-btn:not(:first-child) { border-left: none; }
+    .vc-view-btn:hover { color: var(--text-secondary); }
+    .vc-view-btn.active { background: rgba(59, 130, 246, 0.15); border-color: var(--accent-blue); color: var(--accent-blue); }
+    .vc-highlight { position: absolute; border: 2.5px solid #f59e0b; background: rgba(245, 158, 11, 0.18); z-index: 20; pointer-events: none; border-radius: 2px; animation: cell-pulse 1.5s ease-in-out 3; }
+    .vc-highlight-label { position: absolute; top: -22px; left: 0; font-size: 11px; font-family: 'Fira Code', monospace; color: #fff; background: rgba(245, 158, 11, 0.9); padding: 2px 8px; border-radius: 3px; white-space: nowrap; pointer-events: none; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .vc-group-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; overflow: hidden; }
+    .vc-group-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; transition: background var(--transition); font-size: 12px; font-family: 'Fira Code', monospace; color: var(--text-secondary); }
+    .vc-group-header:hover { background: var(--bg-card-hover); }
+    .vc-group-header.active { background: rgba(245, 158, 11, 0.08); border-left: 3px solid var(--accent-amber); }
+    .vc-group-chevron { font-size: 10px; color: var(--text-muted); transition: transform var(--transition); flex-shrink: 0; width: 16px; text-align: center; }
+    .vc-group-header.active .vc-group-chevron { transform: rotate(90deg); }
+    .vc-group-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 600; flex-shrink: 0; }
+    .vc-group-tag.fields { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .vc-group-tag.row { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+    .vc-group-summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 11px; }
+    .vc-group-body { display: none; padding: 0 14px 10px; }
+    .vc-group-header.active + .vc-group-body { display: block; }
+    .vc-field-item { display: flex; gap: 10px; padding: 6px 8px; border-bottom: 1px solid rgba(42,42,64,0.4); cursor: pointer; transition: background var(--transition); font-size: 12px; font-family: 'Fira Code', monospace; border-radius: 4px; }
+    .vc-field-item:hover { background: rgba(245, 158, 11, 0.06); }
+    .vc-field-item.active { background: rgba(245, 158, 11, 0.12); }
+    .vc-field-item:last-child { border-bottom: none; }
+    .vc-field-label { color: var(--text-muted); min-width: 100px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+    .vc-field-value { color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vc-field-value .original { color: var(--accent-red); text-decoration: line-through; margin-right: 6px; font-size: 11px; }
+    .vc-field-value .modified-val { color: var(--accent-green); }
+    .vc-field-no-loc { opacity: 0.5; cursor: default; }
+    .vc-section-header { font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 8px 0 4px; margin-top: 4px; border-bottom: 1px solid var(--border); }
+
     /* Table-Image Position mode selector */
     .tip-mode { display: flex; align-items: center; gap: 2px; }
     .tip-btn { padding: 3px 8px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 11px; font-family: 'Fira Code', monospace; cursor: pointer; transition: all var(--transition); }
@@ -1118,7 +1164,8 @@
           <div class="tab" data-tab="images">Images</div>
           <div class="tab" data-tab="table">Table Data</div>
           <div class="tab" data-tab="vlm">VLM Grouping</div>
-          <div class="tab" data-tab="check">VLM Check</div>
+          <div class="tab" data-tab="check">VLM Answer</div>
+          <div class="tab" data-tab="visual">Visual Check</div>
         </div>
         <div class="content">
           <!-- Overview Panel -->
@@ -1178,6 +1225,22 @@
           <!-- VLM Check Answer Panel -->
           <div class="panel" id="panelCheck" style="overflow-y:auto;padding:20px;">
             <div id="checkContent"></div>
+          </div>
+
+          <!-- Visual Check Panel -->
+          <div class="panel" id="panelVisual" style="overflow:hidden;">
+            <div class="vc-page-nav" id="vcPageNav"></div>
+            <div class="vc-split">
+              <div class="vc-image-side">
+                <div class="vc-image-viewport" id="vcImageViewport">
+                  <div class="vc-image-container" id="vcImageContainer"></div>
+                </div>
+              </div>
+              <div class="vc-table-side">
+                <div class="vc-view-toggle" id="vcViewToggle"></div>
+                <div class="vc-table-content" id="vcTableContent"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1283,6 +1346,7 @@
       await loadCheckPresets();
       await loadVlmAnswersList();
       renderCheckPanel();
+      renderVisualCheck();
       loadPageImage();
     }
 
@@ -1300,6 +1364,10 @@
             zoomLevel = calcFitZoom(currentViewMode);
             applyZoom();
           }
+        }
+        // Re-render highlight when switching to Visual Check tab (panel was hidden)
+        if (tab.dataset.tab === 'visual') {
+          requestAnimationFrame(() => vcRenderHighlight());
         }
       });
     });
@@ -2251,6 +2319,415 @@
       const d = document.createElement('div');
       d.textContent = s;
       return d.innerHTML;
+    }
+
+    // --- Visual Check ---
+    let vcPageIndex = 0;
+    let vcProcessorImgSize = null;
+    let vcViewMode = 'group';
+    let vcActiveHighlight = null;
+    let vcActiveGroupIdx = -1;
+
+    function renderVisualCheck() {
+      vcPageIndex = 0;
+      vcProcessorImgSize = null;
+      vcActiveHighlight = null;
+      vcActiveGroupIdx = -1;
+      vcViewMode = 'group';
+      vcRenderPageNav();
+      vcRenderViewToggle();
+      vcLoadImage();
+      vcRenderTable();
+    }
+
+    function vcRenderPageNav() {
+      const pages = ticketData.pages || [];
+      const total = pages.length;
+      const nav = document.getElementById('vcPageNav');
+      nav.innerHTML = `
+        <button class="page-btn" id="vcPrev" ${vcPageIndex <= 0 ? 'disabled' : ''}>Prev</button>
+        <span class="page-info">Page ${vcPageIndex + 1} / ${total}</span>
+        <button class="page-btn" id="vcNext" ${vcPageIndex >= total - 1 ? 'disabled' : ''}>Next</button>
+        <input class="page-jump-input" id="vcJump" type="number" min="1" max="${total}" value="${vcPageIndex + 1}">
+      `;
+      document.getElementById('vcPrev').onclick = () => vcSwitchPage(vcPageIndex - 1);
+      document.getElementById('vcNext').onclick = () => vcSwitchPage(vcPageIndex + 1);
+      document.getElementById('vcJump').addEventListener('keydown', e => {
+        if (e.key === 'Enter') vcSwitchPage(parseInt(e.target.value) - 1);
+      });
+    }
+
+    function vcSwitchPage(index) {
+      const pages = ticketData.pages || [];
+      if (index < 0 || index >= pages.length) return;
+      vcPageIndex = index;
+      vcActiveHighlight = null;
+      vcRenderPageNav();
+      vcLoadImage();
+      // Clear active states in table
+      document.querySelectorAll('#vcTableContent .vc-field-item.active').forEach(el => el.classList.remove('active'));
+    }
+
+    async function vcLoadImage() {
+      const pages = ticketData.pages || [];
+      const container = document.getElementById('vcImageContainer');
+      if (!pages.length) {
+        container.innerHTML = '<p style="padding:40px;color:var(--text-muted);text-align:center;">No images</p>';
+        return;
+      }
+      const page = pages[vcPageIndex];
+      if (!page) return;
+      const filename = page.oriInputList?.[0];
+      if (!filename) {
+        container.innerHTML = '<p style="padding:40px;color:var(--text-muted);text-align:center;">No image available</p>';
+        return;
+      }
+      const imgUrl = `/tickets/${currentTicket}/images/${filename}`;
+
+      // Preload processor image for coordinate scaling
+      vcProcessorImgSize = null;
+      const procFilename = page.inputList[0];
+      if (procFilename && procFilename !== filename) {
+        const procImg = new Image();
+        procImg.src = `/tickets/${currentTicket}/images/${procFilename}`;
+        procImg.onload = () => {
+          vcProcessorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
+          vcRenderHighlight();
+        };
+      }
+
+      container.innerHTML = `<img src="${imgUrl}" id="vcPageImg" crossorigin="anonymous">`;
+      const img = document.getElementById('vcPageImg');
+      img.onload = () => {
+        vcRenderHighlight();
+      };
+    }
+
+    function vcRenderHighlight() {
+      const container = document.getElementById('vcImageContainer');
+      container.querySelectorAll('.vc-highlight').forEach(el => el.remove());
+      if (!vcActiveHighlight) return;
+
+      const img = document.getElementById('vcPageImg');
+      if (!img || !img.naturalWidth) return;
+      const displayW = img.clientWidth;
+
+      const items = vcActiveHighlight.items.filter(it => it.regNdx === vcPageIndex);
+      if (!items.length) return;
+
+      items.forEach(({ x, y, w, h, key, text }) => {
+        let sx, sy, sw, sh;
+        if (vcProcessorImgSize) {
+          sx = x * displayW / vcProcessorImgSize.w;
+          sy = y * (img.clientHeight) / vcProcessorImgSize.h;
+          sw = w * displayW / vcProcessorImgSize.w;
+          sh = h * (img.clientHeight) / vcProcessorImgSize.h;
+        } else {
+          // No processor image scaling needed (same image)
+          sx = x * displayW / img.naturalWidth;
+          sy = y * img.clientHeight / img.naturalHeight;
+          sw = w * displayW / img.naturalWidth;
+          sh = h * img.clientHeight / img.naturalHeight;
+        }
+        const div = document.createElement('div');
+        div.className = 'vc-highlight';
+        div.style.left = sx + 'px';
+        div.style.top = sy + 'px';
+        div.style.width = sw + 'px';
+        div.style.height = sh + 'px';
+        if (key || text) {
+          const label = document.createElement('span');
+          label.className = 'vc-highlight-label';
+          label.textContent = `${key}: ${text}`;
+          div.appendChild(label);
+        }
+        container.appendChild(div);
+      });
+
+      // Scroll first highlight into view
+      const first = container.querySelector('.vc-highlight');
+      if (first) {
+        requestAnimationFrame(() => {
+          first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+      }
+    }
+
+    function vcRenderViewToggle() {
+      document.getElementById('vcViewToggle').innerHTML = `
+        <button class="vc-view-btn ${vcViewMode === 'group' ? 'active' : ''}" data-mode="group">Group</button>
+        <button class="vc-view-btn ${vcViewMode === 'field' ? 'active' : ''}" data-mode="field">Field</button>
+      `;
+      document.querySelectorAll('.vc-view-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          vcViewMode = btn.dataset.mode;
+          vcActiveHighlight = null;
+          vcActiveGroupIdx = -1;
+          vcRenderViewToggle();
+          vcRenderTable();
+          vcRenderHighlight();
+        });
+      });
+    }
+
+    function vcRenderTable() {
+      const areas = ticketData.areas || [];
+      const tables = ticketData.tables || [];
+      const el = document.getElementById('vcTableContent');
+
+      if (!areas.length && !tables.length) {
+        el.innerHTML = '<p style="color:var(--text-muted);padding:20px;">No table data</p>';
+        return;
+      }
+
+      if (vcViewMode === 'group') {
+        vcRenderGroupView(el, areas, tables);
+      } else {
+        vcRenderFieldView(el, areas, tables);
+      }
+    }
+
+    function vcBuildFieldItems(areas, tables) {
+      // Build field items from areas
+      const fieldItems = areas.map(a => {
+        const value = a.text || a.textOCR || '';
+        const label = a.name || a.key || '';
+        const hasLoc = a.regNdx != null && !(a.x === 0 && a.y === 0 && a.w === 1 && a.h === 1) && (a.w > 0 && a.h > 0);
+        return { key: label, text: value, textModify: '', x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx, hasLoc, source: 'field' };
+      });
+
+      // Build row items from tables
+      const rowItems = [];
+      if (tables.length) {
+        const t = tables[0];
+        const headers = t.headers || [];
+        const rows = t.rows || [];
+        rows.forEach((row, ri) => {
+          const cells = [];
+          headers.forEach(h => {
+            const cell = row[h.key] || {};
+            const text = cell.text || '';
+            const textModify = cell.textModify || '';
+            const hasAreaList = cell.areaList && cell.areaList.length > 0;
+            const hasSingleLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
+            const hasLoc = hasAreaList || hasSingleLoc;
+
+            const items = [];
+            if (hasAreaList) {
+              cell.areaList.forEach(a => {
+                items.push({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx });
+              });
+            } else if (hasSingleLoc) {
+              items.push({ x: cell.x, y: cell.y, w: cell.w, h: cell.h, regNdx: cell.regNdx });
+            }
+
+            cells.push({
+              key: h.name || h.text || h.key,
+              text, textModify, hasLoc, items,
+              regNdx: hasAreaList ? cell.areaList[0].regNdx : cell.regNdx
+            });
+          });
+          rowItems.push({ rowIndex: ri, cells });
+        });
+      }
+
+      return { fieldItems, rowItems };
+    }
+
+    function vcRenderGroupView(el, areas, tables) {
+      const { fieldItems, rowItems } = vcBuildFieldItems(areas, tables);
+      let html = '';
+
+      // Fields group card
+      if (fieldItems.length) {
+        const summary = fieldItems.slice(0, 3).map(f => f.text || '—').join(' | ');
+        html += `<div class="vc-group-card" data-group="fields">
+          <div class="vc-group-header${vcActiveGroupIdx === -2 ? ' active' : ''}" data-gidx="-2">
+            <span class="vc-group-chevron">▶</span>
+            <span class="vc-group-tag fields">Fields</span>
+            <span class="vc-group-summary">${escHtml(summary)}</span>
+          </div>
+          <div class="vc-group-body">`;
+        fieldItems.forEach((f, fi) => {
+          const locCls = f.hasLoc ? '' : ' vc-field-no-loc';
+          html += `<div class="vc-field-item${locCls}" data-type="field" data-fi="${fi}">
+            <span class="vc-field-label">${escHtml(f.key)}</span>
+            <span class="vc-field-value">${escHtml(f.text)}</span>
+          </div>`;
+        });
+        html += '</div></div>';
+      }
+
+      // Row group cards
+      rowItems.forEach((row, ri) => {
+        const summaryCells = row.cells.filter(c => (c.textModify || c.text)).slice(0, 3);
+        const summary = summaryCells.map(c => c.textModify || c.text).join(' | ');
+        html += `<div class="vc-group-card" data-group="row" data-ri="${ri}">
+          <div class="vc-group-header${vcActiveGroupIdx === ri ? ' active' : ''}" data-gidx="${ri}">
+            <span class="vc-group-chevron">▶</span>
+            <span class="vc-group-tag row">#${ri + 1}</span>
+            <span class="vc-group-summary">${escHtml(summary)}</span>
+          </div>
+          <div class="vc-group-body">`;
+        row.cells.forEach((c, ci) => {
+          const locCls = c.hasLoc ? '' : ' vc-field-no-loc';
+          const isModified = c.text !== c.textModify && c.textModify;
+          let valHtml;
+          if (isModified) {
+            valHtml = `<span class="original">${escHtml(c.text)}</span><span class="modified-val">${escHtml(c.textModify)}</span>`;
+          } else {
+            valHtml = escHtml(c.textModify || c.text);
+          }
+          html += `<div class="vc-field-item${locCls}" data-type="cell" data-ri="${ri}" data-ci="${ci}">
+            <span class="vc-field-label">${escHtml(c.key)}</span>
+            <span class="vc-field-value">${valHtml}</span>
+          </div>`;
+        });
+        html += '</div></div>';
+      });
+
+      el.innerHTML = html;
+      vcBindGroupEvents(fieldItems, rowItems);
+    }
+
+    function vcRenderFieldView(el, areas, tables) {
+      const { fieldItems, rowItems } = vcBuildFieldItems(areas, tables);
+      let html = '';
+
+      if (fieldItems.length) {
+        html += '<div class="vc-section-header">Fields</div>';
+        fieldItems.forEach((f, fi) => {
+          const locCls = f.hasLoc ? '' : ' vc-field-no-loc';
+          html += `<div class="vc-field-item${locCls}" data-type="field" data-fi="${fi}">
+            <span class="vc-field-label">${escHtml(f.key)}</span>
+            <span class="vc-field-value">${escHtml(f.text)}</span>
+          </div>`;
+        });
+      }
+
+      rowItems.forEach((row, ri) => {
+        html += `<div class="vc-section-header">Row #${ri + 1}</div>`;
+        row.cells.forEach((c, ci) => {
+          const locCls = c.hasLoc ? '' : ' vc-field-no-loc';
+          const isModified = c.text !== c.textModify && c.textModify;
+          let valHtml;
+          if (isModified) {
+            valHtml = `<span class="original">${escHtml(c.text)}</span><span class="modified-val">${escHtml(c.textModify)}</span>`;
+          } else {
+            valHtml = escHtml(c.textModify || c.text);
+          }
+          html += `<div class="vc-field-item${locCls}" data-type="cell" data-ri="${ri}" data-ci="${ci}">
+            <span class="vc-field-label">${escHtml(c.key)}</span>
+            <span class="vc-field-value">${valHtml}</span>
+          </div>`;
+        });
+      });
+
+      el.innerHTML = html;
+      vcBindFieldEvents(fieldItems, rowItems);
+    }
+
+    function vcBindGroupEvents(fieldItems, rowItems) {
+      // Group header click: toggle expand + highlight all items in group
+      document.querySelectorAll('#vcTableContent .vc-group-header').forEach(header => {
+        header.addEventListener('click', () => {
+          const gidx = parseInt(header.dataset.gidx);
+          const wasActive = header.classList.contains('active');
+
+          // Toggle off all headers
+          document.querySelectorAll('#vcTableContent .vc-group-header.active').forEach(h => h.classList.remove('active'));
+          document.querySelectorAll('#vcTableContent .vc-field-item.active').forEach(f => f.classList.remove('active'));
+
+          if (wasActive) {
+            vcActiveGroupIdx = -1;
+            vcActiveHighlight = null;
+            vcRenderHighlight();
+            return;
+          }
+
+          header.classList.add('active');
+          vcActiveGroupIdx = gidx;
+
+          // Collect all items for this group
+          if (gidx === -2) {
+            // Fields group
+            const items = fieldItems.filter(f => f.hasLoc).map(f => ({ x: f.x, y: f.y, w: f.w, h: f.h, regNdx: f.regNdx, key: f.key, text: f.text }));
+            vcHighlightItems(items);
+          } else {
+            // Row group
+            const row = rowItems[gidx];
+            if (!row) return;
+            const items = [];
+            row.cells.forEach(c => {
+              c.items.forEach(it => items.push({ ...it, key: c.key, text: c.textModify || c.text }));
+            });
+            vcHighlightItems(items);
+          }
+        });
+      });
+
+      // Individual field click inside expanded group
+      document.querySelectorAll('#vcTableContent .vc-field-item:not(.vc-field-no-loc)').forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const type = item.dataset.type;
+          document.querySelectorAll('#vcTableContent .vc-field-item.active').forEach(f => f.classList.remove('active'));
+          item.classList.add('active');
+
+          if (type === 'field') {
+            const fi = parseInt(item.dataset.fi);
+            const f = fieldItems[fi];
+            if (!f || !f.hasLoc) return;
+            vcHighlightItems([{ x: f.x, y: f.y, w: f.w, h: f.h, regNdx: f.regNdx, key: f.key, text: f.text }]);
+          } else if (type === 'cell') {
+            const ri = parseInt(item.dataset.ri);
+            const ci = parseInt(item.dataset.ci);
+            const c = rowItems[ri]?.cells[ci];
+            if (!c || !c.hasLoc) return;
+            const items = c.items.map(it => ({ ...it, key: c.key, text: c.textModify || c.text }));
+            vcHighlightItems(items);
+          }
+        });
+      });
+    }
+
+    function vcBindFieldEvents(fieldItems, rowItems) {
+      document.querySelectorAll('#vcTableContent .vc-field-item:not(.vc-field-no-loc)').forEach(item => {
+        item.addEventListener('click', () => {
+          const type = item.dataset.type;
+          document.querySelectorAll('#vcTableContent .vc-field-item.active').forEach(f => f.classList.remove('active'));
+          item.classList.add('active');
+
+          if (type === 'field') {
+            const fi = parseInt(item.dataset.fi);
+            const f = fieldItems[fi];
+            if (!f || !f.hasLoc) return;
+            vcHighlightItems([{ x: f.x, y: f.y, w: f.w, h: f.h, regNdx: f.regNdx, key: f.key, text: f.text }]);
+          } else if (type === 'cell') {
+            const ri = parseInt(item.dataset.ri);
+            const ci = parseInt(item.dataset.ci);
+            const c = rowItems[ri]?.cells[ci];
+            if (!c || !c.hasLoc) return;
+            const items = c.items.map(it => ({ ...it, key: c.key, text: c.textModify || c.text }));
+            vcHighlightItems(items);
+          }
+        });
+      });
+    }
+
+    function vcHighlightItems(items) {
+      if (!items.length) return;
+      vcActiveHighlight = { items };
+
+      // Check if need to switch page (use first item's regNdx)
+      const targetPage = items[0].regNdx;
+      if (targetPage != null && targetPage !== vcPageIndex) {
+        vcPageIndex = targetPage;
+        vcRenderPageNav();
+        vcLoadImage(); // vcRenderHighlight will be called on image load
+      } else {
+        vcRenderHighlight();
+      }
     }
 
     // --- VLM Grouping ---
@@ -3277,6 +3754,7 @@
           renderVLMPanel();
           await loadVlmAnswersList();
           renderCheckPanel();
+          renderVisualCheck();
           loadPageImage();
         }
       } else {
