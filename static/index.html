@@ -1376,9 +1376,9 @@
       renderVLMPanel();
       await loadCheckPresets();
       await loadVlmAnswersList();
+      await loadDataAnswersList();
       renderCheckPanel();
       renderVisualCheck();
-      await loadDataAnswersList();
       renderDataPanel();
       loadPageImage();
     }
@@ -2741,8 +2741,11 @@
 
     // VC Save as Answer
     document.getElementById('vcSaveAsAnswer')?.addEventListener('click', async () => {
-      const name = prompt('輸入答案名稱:', `${currentTicket || 'answer'}_vc`);
+      const existingNames = [...(vlmAnswersList || []).map(a => a.name), ...dataAnswersList.map(a => a.name)];
+      const defaultName = deduplicateName(`${currentTicket || 'answer'}_vc`, existingNames);
+      const name = prompt('輸入答案名稱:', defaultName);
       if (!name) return;
+      const finalName = deduplicateName(name, existingNames);
 
       const areas = ticketData.areas || [];
       const tables = ticketData.tables || [];
@@ -2773,13 +2776,13 @@
       const columns = headers.map(h => h.name || h.text || h.key).join(', ');
 
       try {
-        const res = await fetch(`/api/data-answers/${encodeURIComponent(name)}`, {
+        const res = await fetch(`/api/data-answers/${encodeURIComponent(finalName)}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticketId: currentTicket, fields, rows, columns, source: 'visual-check' }),
         });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
         await loadDataAnswersList();
-        alert(`答案「${name}」已儲存`);
+        alert(`答案「${finalName}」已儲存`);
       } catch (e) { alert('儲存失敗: ' + e.message); }
     });
 
@@ -3268,6 +3271,14 @@
       try { vlmAnswersList = await fetchJSON('/api/vlm-answers'); } catch { vlmAnswersList = []; }
     }
 
+    function deduplicateName(name, existingNames) {
+      if (!existingNames.includes(name)) return name;
+      const base = name.replace(/\(\d+\)$/, '').trimEnd();
+      let i = 1;
+      while (existingNames.includes(`${base} (${i})`)) i++;
+      return `${base} (${i})`;
+    }
+
     async function loadVlmAnswersByName(name) {
       if (!name) { vlmAnswers = null; return; }
       try { vlmAnswers = await fetchJSON(`/api/vlm-answers/${encodeURIComponent(name)}`); } catch { vlmAnswers = null; }
@@ -3409,16 +3420,28 @@
         html += `<div class="check-progress-text">圖片組 ${checkProgress.pairIndex + 1}/${checkProgress.totalPairs} | ${checkProgress.elapsed}s | 預估剩餘 ~${eta}s</div></div>`;
       }
 
-      // === Section B: VLM Answers ===
-      html += '<div class="check-config" style="margin-top:16px;"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>VLM 答案</div>';
+      // === Section B: 選擇答案 ===
+      html += '<div class="check-config" style="margin-top:16px;"><div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>選擇答案</div>';
 
-      // Answer selector dropdown
+      // Answer selector dropdown (VLM answers + Data answers)
       html += '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;">';
       html += '<div class="vlm-field" style="flex:3;"><label>已儲存答案</label><select id="vlmAnswerSelect"><option value="">— 選擇答案 —</option>';
-      vlmAnswersList.forEach(a => {
-        const sel = vlmAnswers && vlmAnswers.name === a.name ? ' selected' : '';
-        html += `<option value="${escHtml(a.name)}"${sel}>${escHtml(a.name)} (${a.rowCount} rows)</option>`;
-      });
+      if (vlmAnswersList.length) {
+        html += '<optgroup label="VLM 答案">';
+        vlmAnswersList.forEach(a => {
+          const sel = vlmAnswers && vlmAnswers._source !== 'data' && vlmAnswers.name === a.name ? ' selected' : '';
+          html += `<option value="vlm:${escHtml(a.name)}"${sel}>${escHtml(a.name)} (${a.rowCount} rows)</option>`;
+        });
+        html += '</optgroup>';
+      }
+      if (dataAnswersList.length) {
+        html += '<optgroup label="Data 答案">';
+        dataAnswersList.forEach(a => {
+          const sel = vlmAnswers && vlmAnswers._source === 'data' && vlmAnswers.name === a.name ? ' selected' : '';
+          html += `<option value="data:${escHtml(a.name)}"${sel}>${escHtml(a.name)} (${a.fieldCount}F / ${a.rowCount}R)</option>`;
+        });
+        html += '</optgroup>';
+      }
       html += '</select></div>';
       if (vlmAnswers) {
         html += '<div class="vlm-field" style="flex:1;"><label>儲存名稱</label><input type="text" id="vlmAnswerName" value="' + escHtml(vlmAnswers.name || '') + '"></div>';
@@ -3446,9 +3469,9 @@
         html += '</tbody></table></div>';
 
         html += '<div style="display:flex;gap:8px;">';
-        html += '<button class="vlm-detail-btn" id="vlmSaveBtn" style="border-color:var(--accent-green);color:var(--accent-green);">儲存答案</button>';
-        html += '<button class="vlm-detail-btn" id="vlmDeleteBtn" style="color:var(--accent-red);">刪除答案</button>';
-        html += '<button class="vlm-detail-btn" id="vlmCopyToData" style="border-color:var(--accent-blue);color:var(--accent-blue);">另存為答案</button>';
+        html += '<button class="vlm-detail-btn" id="vlmSaveBtn" style="border-color:var(--accent-green);color:var(--accent-green);">儲存</button>';
+        html += '<button class="vlm-detail-btn" id="vlmDeleteBtn" style="color:var(--accent-red);">刪除</button>';
+        html += '<button class="vlm-detail-btn" id="vlmCopyToData" style="border-color:var(--accent-blue);color:var(--accent-blue);">另存</button>';
         html += '</div>';
       } else if (!checkLoading) {
         html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">尚無 VLM 答案。請先執行 VLM 讀取或從下拉選單載入。</p>';
@@ -3574,11 +3597,26 @@
         } catch (e) { alert('刪除失敗: ' + e.message); }
       });
 
-      // VLM answer select
+      // Answer select (VLM or Data)
       document.getElementById('vlmAnswerSelect')?.addEventListener('change', async (e) => {
-        const name = e.target.value;
-        if (name) {
-          await loadVlmAnswersByName(name);
+        const val = e.target.value;
+        if (val.startsWith('vlm:')) {
+          await loadVlmAnswersByName(val.slice(4));
+          if (vlmAnswers) vlmAnswers._source = 'vlm';
+          checkCompareResult = null;
+        } else if (val.startsWith('data:')) {
+          const name = val.slice(5);
+          try {
+            const data = await fetchJSON(`/api/data-answers/${encodeURIComponent(name)}`);
+            // Convert data answer to vlmAnswers format for comparison
+            vlmAnswers = {
+              name: data.name,
+              rows: data.rows || [],
+              columns: data.columns || '',
+              skipColumns: [],
+              _source: 'data',
+            };
+          } catch { vlmAnswers = null; }
           checkCompareResult = null;
         } else {
           vlmAnswers = null;
@@ -3587,7 +3625,7 @@
         renderCheckPanel();
       });
 
-      // VLM answer save (with name)
+      // Answer save (routes to VLM or Data API based on source)
       document.getElementById('vlmSaveBtn')?.addEventListener('click', async () => {
         if (!vlmAnswers) return;
         const nameInput = document.getElementById('vlmAnswerName');
@@ -3601,44 +3639,52 @@
         });
         const oldName = vlmAnswers.name;
         vlmAnswers.name = newName;
+        const isData = vlmAnswers._source === 'data';
+        const apiBase = isData ? '/api/data-answers' : '/api/vlm-answers';
         try {
-          const res = await fetch(`/api/vlm-answers/${encodeURIComponent(newName)}`, {
+          const res = await fetch(`${apiBase}/${encodeURIComponent(newName)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(vlmAnswers),
           });
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           if (oldName && oldName !== newName) {
-            await fetch(`/api/vlm-answers/${encodeURIComponent(oldName)}`, { method: 'DELETE' }).catch(() => {});
+            await fetch(`${apiBase}/${encodeURIComponent(oldName)}`, { method: 'DELETE' }).catch(() => {});
           }
           await loadVlmAnswersList();
+          if (isData) await loadDataAnswersList();
           alert(`答案「${newName}」已儲存`);
           renderCheckPanel();
         } catch (e) { alert('儲存失敗: ' + e.message); }
       });
 
-      // VLM answer delete
+      // Answer delete (routes to VLM or Data API based on source)
       document.getElementById('vlmDeleteBtn')?.addEventListener('click', async () => {
         if (!vlmAnswers) return;
         const name = vlmAnswers.name;
         if (!name) { alert('答案沒有名稱，無法刪除'); return; }
         if (!confirm(`確定刪除答案「${name}」？`)) return;
+        const isData = vlmAnswers._source === 'data';
+        const apiBase = isData ? '/api/data-answers' : '/api/vlm-answers';
         try {
-          const res = await fetch(`/api/vlm-answers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+          const res = await fetch(`${apiBase}/${encodeURIComponent(name)}`, { method: 'DELETE' });
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           vlmAnswers = null;
           checkCompareResult = null;
           await loadVlmAnswersList();
+          if (isData) await loadDataAnswersList();
           alert(`答案「${name}」已刪除`);
           renderCheckPanel();
         } catch (e) { alert('刪除失敗: ' + e.message); }
       });
 
-      // VLM answer copy to Data Answer
+      // 另存 (copy to Data Answer with auto-dedup name)
       document.getElementById('vlmCopyToData')?.addEventListener('click', async () => {
         if (!vlmAnswers) return;
-        const defaultName = vlmAnswers.name || 'vlm_answer';
-        const name = prompt('輸入 Data Answer 名稱:', defaultName);
+        const existingNames = [...vlmAnswersList.map(a => a.name), ...dataAnswersList.map(a => a.name)];
+        const defaultName = deduplicateName(vlmAnswers.name || 'answer', existingNames);
+        const name = prompt('輸入答案名稱:', defaultName);
         if (!name) return;
+        const finalName = deduplicateName(name, existingNames);
         // Collect edited rows from DOM
         const editedRows = JSON.parse(JSON.stringify(vlmAnswers.rows || []));
         document.querySelectorAll('.vlm-editable').forEach(td => {
@@ -3647,7 +3693,7 @@
           if (editedRows[ri]) editedRows[ri][col] = td.textContent;
         });
         try {
-          const res = await fetch(`/api/data-answers/${encodeURIComponent(name)}`, {
+          const res = await fetch(`/api/data-answers/${encodeURIComponent(finalName)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ticketId: vlmAnswers.ticketId || currentTicket || '',
@@ -3659,7 +3705,9 @@
           });
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           await loadDataAnswersList();
-          alert(`已另存為 Data Answer「${name}」`);
+          await loadVlmAnswersList();
+          alert(`已另存為「${finalName}」`);
+          renderCheckPanel();
         } catch (e) { alert('儲存失敗: ' + e.message); }
       });
     }
@@ -4040,9 +4088,9 @@
           renderTable();
           renderVLMPanel();
           await loadVlmAnswersList();
+          await loadDataAnswersList();
           renderCheckPanel();
           renderVisualCheck();
-          await loadDataAnswersList();
           renderDataPanel();
           loadPageImage();
         }
