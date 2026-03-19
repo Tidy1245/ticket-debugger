@@ -381,8 +381,10 @@ def _get_jpeg_size(path: Path) -> tuple[int, int]:
 DATA_DIR = Path(__file__).parent / "data"
 VLM_ANSWERS_DIR = DATA_DIR / "vlm_answers"
 CUSTOM_PRESETS_DIR = DATA_DIR / "custom_presets"
+DATA_ANSWERS_DIR = DATA_DIR / "data_answers"
 VLM_ANSWERS_DIR.mkdir(parents=True, exist_ok=True)
 CUSTOM_PRESETS_DIR.mkdir(parents=True, exist_ok=True)
+DATA_ANSWERS_DIR.mkdir(parents=True, exist_ok=True)
 
 CHECK_PRESETS = {
     'BVLGARI 進口': {
@@ -622,6 +624,67 @@ async def delete_vlm_answers(name: str):
     path = VLM_ANSWERS_DIR / f"{safe}.json"
     if not path.exists():
         raise HTTPException(404, "No VLM answers found")
+    path.unlink()
+    return {"deleted": name}
+
+
+# --- Data Answers CRUD ---
+
+@app.get("/api/data-answers")
+async def list_data_answers():
+    """List all saved data answers."""
+    result = []
+    for f in sorted(DATA_ANSWERS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            with open(f, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            result.append({
+                "name": data.get("name", f.stem),
+                "source": data.get("source", ""),
+                "columns": data.get("columns", ""),
+                "fieldCount": len(data.get("fields", [])),
+                "rowCount": len(data.get("rows", [])),
+                "updatedAt": data.get("updatedAt", ""),
+            })
+        except Exception:
+            pass
+    return result
+
+
+@app.get("/api/data-answers/{name}")
+async def get_data_answer(name: str):
+    """Get a named data answer."""
+    safe = name.strip().replace("/", "_").replace("\\", "_")
+    path = DATA_ANSWERS_DIR / f"{safe}.json"
+    if not path.exists():
+        raise HTTPException(404, "Data answer not found")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@app.put("/api/data-answers/{name}")
+async def save_data_answer(request: Request, name: str):
+    """Save/update a named data answer."""
+    body = await request.json()
+    import datetime
+    body["updatedAt"] = datetime.datetime.now().isoformat()
+    if not body.get("createdAt"):
+        body["createdAt"] = body["updatedAt"]
+    body["name"] = name
+    safe = name.strip().replace("/", "_").replace("\\", "_")
+    path = DATA_ANSWERS_DIR / f"{safe}.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(body, f, ensure_ascii=False, indent=2)
+    return {"saved": name}
+
+
+@app.delete("/api/data-answers/{name}")
+async def delete_data_answer(name: str):
+    """Delete a named data answer."""
+    safe = name.strip().replace("/", "_").replace("\\", "_")
+    path = DATA_ANSWERS_DIR / f"{safe}.json"
+    if not path.exists():
+        raise HTTPException(404, "Data answer not found")
     path.unlink()
     return {"deleted": name}
 
