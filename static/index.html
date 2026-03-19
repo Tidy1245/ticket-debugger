@@ -231,7 +231,6 @@
     /* Visual Check */
     .vc-split { display: flex; flex: 1; min-height: 0; }
     .vc-image-side { flex: 1; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
-    .vc-image-toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; }
     .vc-image-viewport { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; background: var(--bg-primary); }
     .vc-image-container { position: relative; }
     .vc-image-container img { width: 100%; display: block; }
@@ -249,11 +248,11 @@
     .vc-group-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; overflow: hidden; }
     .vc-group-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; transition: background var(--transition); font-size: 12px; font-family: 'Fira Code', monospace; color: var(--text-secondary); }
     .vc-group-header:hover { background: var(--bg-card-hover); }
-    .vc-group-header.active { background: rgba(245, 158, 11, 0.08); border-left: 3px solid var(--accent-amber); }
+    .vc-group-card.vc-active { border-left: 3px solid var(--accent-amber); }
     .vc-group-chevron { font-size: 10px; color: var(--text-muted); transition: transform var(--transition); flex-shrink: 0; width: 16px; text-align: center; }
     .vc-group-header.active .vc-group-chevron { transform: rotate(90deg); }
     .vc-group-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 600; flex-shrink: 0; }
-    .vc-group-tag.fields { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+    .vc-group-tag.fields { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
     .vc-group-tag.row { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
     .vc-group-summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 11px; }
     .vc-group-body { display: none; padding: 0 14px 10px; }
@@ -268,9 +267,7 @@
     .vc-field-value .modified-val { color: var(--accent-green); }
     .vc-field-no-loc { opacity: 0.5; cursor: default; }
     .vc-field-no-loc .vc-field-label { color: rgba(245, 158, 11, 0.4); }
-    .vc-group-header.active + .vc-group-body { background: rgba(245, 158, 11, 0.04); }
     .vc-cross-page { background: rgba(16, 185, 129, 0.06); }
-    .vc-cross-page .vc-group-tag { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
     .vc-field-item.vc-cross-page-field { background: rgba(16, 185, 129, 0.10); }
 
     /* Table-Image Position mode selector */
@@ -1231,11 +1228,6 @@
             <div class="vc-page-nav" id="vcPageNav"></div>
             <div class="vc-split">
               <div class="vc-image-side">
-                <div class="vc-image-toolbar">
-                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;font-family:'Fira Code',monospace;">
-                    <input type="checkbox" id="vcShowText"> Show Text
-                  </label>
-                </div>
                 <div class="vc-image-viewport" id="vcImageViewport">
                   <div class="vc-image-container" id="vcImageContainer"></div>
                 </div>
@@ -2331,11 +2323,6 @@
     let vcActiveGroupIdx = -1;
     let vcShowText = false;
 
-    document.getElementById('vcShowText').addEventListener('change', (e) => {
-      vcShowText = e.target.checked;
-      vcRenderHighlight();
-    });
-
     function renderVisualCheck() {
       vcPageIndex = 0;
       vcProcessorImgSize = null;
@@ -2372,12 +2359,19 @@
         <span class="page-info">Page ${vcPageIndex + 1} / ${total}</span>
         <button class="page-btn" id="vcNext" ${vcPageIndex >= total - 1 ? 'disabled' : ''}>Next</button>
         <input class="page-jump-input" id="vcJump" type="number" min="1" max="${total}" value="${vcPageIndex + 1}">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary);cursor:pointer;font-family:'Fira Code',monospace;margin-left:4px;">
+          <input type="checkbox" id="vcShowText" ${vcShowText ? 'checked' : ''}> Show Text
+        </label>
         ${groupInfo}
       `;
       document.getElementById('vcPrev').onclick = () => vcSwitchPage(vcPageIndex - 1);
       document.getElementById('vcNext').onclick = () => vcSwitchPage(vcPageIndex + 1);
       document.getElementById('vcJump').addEventListener('keydown', e => {
         if (e.key === 'Enter') vcSwitchPage(parseInt(e.target.value) - 1);
+      });
+      document.getElementById('vcShowText').addEventListener('change', (e) => {
+        vcShowText = e.target.checked;
+        vcRenderHighlight();
       });
     }
 
@@ -2550,7 +2544,8 @@
       // Fields group card
       if (fieldItems.length) {
         const summary = fieldItems.slice(0, 3).map(f => f.text || '—').join(' | ');
-        html += `<div class="vc-group-card" data-group="fields">
+        const fieldsActiveCls = vcActiveGroupIdx === -2 ? ' vc-active' : '';
+        html += `<div class="vc-group-card${fieldsActiveCls}" data-group="fields">
           <div class="vc-group-header${vcActiveGroupIdx === -2 ? ' active' : ''}" data-gidx="-2">
             <span class="vc-group-chevron">▶</span>
             <span class="vc-group-tag fields">Fields</span>
@@ -2572,7 +2567,8 @@
         const summaryCells = row.cells.filter(c => (c.textModify || c.text)).slice(0, 3);
         const summary = summaryCells.map(c => c.textModify || c.text).join(' | ');
         const crossCls = row.crossPage ? ' vc-cross-page' : '';
-        html += `<div class="vc-group-card${crossCls}" data-group="row" data-ri="${ri}">
+        const rowActiveCls = vcActiveGroupIdx === ri ? ' vc-active' : '';
+        html += `<div class="vc-group-card${crossCls}${rowActiveCls}" data-group="row" data-ri="${ri}">
           <div class="vc-group-header${vcActiveGroupIdx === ri ? ' active' : ''}" data-gidx="${ri}">
             <span class="vc-group-chevron">▶</span>
             <span class="vc-group-tag row">#${ri + 1}</span>
@@ -2608,8 +2604,9 @@
           const gidx = parseInt(header.dataset.gidx);
           const wasActive = header.classList.contains('active');
 
-          // Toggle off all headers
+          // Toggle off all
           document.querySelectorAll('#vcTableContent .vc-group-header.active').forEach(h => h.classList.remove('active'));
+          document.querySelectorAll('#vcTableContent .vc-group-card.vc-active').forEach(c => c.classList.remove('vc-active'));
           document.querySelectorAll('#vcTableContent .vc-field-item.active').forEach(f => f.classList.remove('active'));
 
           if (wasActive) {
@@ -2620,6 +2617,7 @@
           }
 
           header.classList.add('active');
+          header.closest('.vc-group-card').classList.add('vc-active');
           vcActiveGroupIdx = gidx;
 
           // Collect all items for this group
