@@ -717,57 +717,72 @@ def build_correct_prompt(rules: str, columns: str, rows: list) -> str:
 - 只輸出 JSON，不要其他文字"""
 
 
+PLACEHOLDER_IMG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
+VLM_CORRECT_BATCH = 5  # rows per batch
+
+
 @app.post("/api/vlm-correct")
 async def vlm_correct_answer(body: VLMCorrectRequest):
-    """Run VLM to correct existing table data (text-only, no image needed)."""
+    """Run VLM to correct existing table data in batches (text-only)."""
     if not body.columns or not body.rules:
         raise HTTPException(400, "Columns and rules are required")
 
-    prompt = build_correct_prompt(body.rules, body.columns, body.rows)
+    all_rows = body.rows or []
+    # Split into batches
+    batches = [all_rows[i:i + VLM_CORRECT_BATCH] for i in range(0, len(all_rows), VLM_CORRECT_BATCH)]
+    if not batches:
+        batches = [[]]
 
     async def event_stream():
         t0 = time.time()
-        yield f"data: {json.dumps({'event': 'init'})}\n\n"
+        yield f"data: {json.dumps({'event': 'init', 'totalBatches': len(batches)})}\n\n"
 
-        try:
-            async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
-                resp = await client.post(VLM_URL, json={
-                    "model": VLM_MODEL,
-                    "messages": [{"role": "user", "content": [
-                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"}},
-                        {"type": "text", "text": prompt},
-                    ]}],
-                    "max_tokens": 8000,
-                    "temperature": 0.1,
-                })
-                if resp.status_code != 200:
-                    err_detail = resp.text[:500]
-                    raise Exception(f"VLM {resp.status_code}: {err_detail}")
-                content = resp.json()["choices"][0]["message"]["content"]
+        corrected = []
+        async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
+            for bi, batch in enumerate(batches):
+                prompt = build_correct_prompt(body.rules, body.columns, batch)
+                try:
+                    resp = await client.post(VLM_URL, json={
+                        "model": VLM_MODEL,
+                        "messages": [{"role": "user", "content": [
+                            {"type": "image_url", "image_url": {"url": PLACEHOLDER_IMG}},
+                            {"type": "text", "text": prompt},
+                        ]}],
+                        "max_tokens": 4000,
+                        "temperature": 0.1,
+                    })
+                    if resp.status_code != 200:
+                        err_detail = resp.text[:500]
+                        raise Exception(f"VLM {resp.status_code}: {err_detail}")
+                    content = resp.json()["choices"][0]["message"]["content"]
 
-                # Parse JSON
-                js = content
-                if "```json" in content:
-                    js = content.split("```json")[1].split("```")[0]
-                elif "```" in content:
-                    js = content.split("```")[1].split("```")[0]
-                parsed = json.loads(js.strip())
-                if not isinstance(parsed, list):
-                    parsed = [parsed]
+                    # Parse JSON
+                    js = content
+                    if "```json" in content:
+                        js = content.split("```json")[1].split("```")[0]
+                    elif "```" in content:
+                        js = content.split("```")[1].split("```")[0]
+                    parsed = json.loads(js.strip())
+                    if not isinstance(parsed, list):
+                        parsed = [parsed]
 
-                # Normalize: extract fields if present
-                corrected = []
-                for item in parsed:
-                    fields = item.get("fields", item)
-                    if isinstance(fields, dict):
-                        corrected.append(fields)
+                    batch_rows = []
+                    for item in parsed:
+                        fields = item.get("fields", item)
+                        if isinstance(fields, dict):
+                            batch_rows.append(fields)
+                    corrected.extend(batch_rows)
+
+                except Exception as e:
+                    elapsed = round(time.time() - t0, 1)
+                    yield f"data: {json.dumps({'event': 'error', 'message': str(e), 'elapsed': elapsed, 'batch': bi})}\n\n"
+                    return
 
                 elapsed = round(time.time() - t0, 1)
-                yield f"data: {json.dumps({'event': 'done', 'rows': corrected, 'elapsed': elapsed})}\n\n"
+                yield f"data: {json.dumps({'event': 'progress', 'batch': bi, 'totalBatches': len(batches), 'elapsed': elapsed})}\n\n"
 
-        except Exception as e:
-            elapsed = round(time.time() - t0, 1)
-            yield f"data: {json.dumps({'event': 'error', 'message': str(e), 'elapsed': elapsed})}\n\n"
+        elapsed = round(time.time() - t0, 1)
+        yield f"data: {json.dumps({'event': 'done', 'rows': corrected, 'elapsed': elapsed})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

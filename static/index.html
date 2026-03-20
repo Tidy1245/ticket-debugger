@@ -3091,21 +3091,32 @@
             throw new Error(`${resp.status}: ${detail}`);
           }
 
-          const text = await resp.text();
-          // Parse SSE events from response text
-          const events = text.split('\n').filter(l => l.startsWith('data: ')).map(l => JSON.parse(l.slice(6)));
-          const errEvt = events.find(e => e.event === 'error');
-          if (errEvt) throw new Error(errEvt.message);
-          const doneEvt = events.find(e => e.event === 'done');
-          if (doneEvt) {
-            dataAnswers.rows = doneEvt.rows;
-            dataAnswers.columns = columns;
-            btn.disabled = false;
-            renderDataPanel();
-            const newStatus = document.getElementById('dataVlmStatus');
-            if (newStatus) newStatus.textContent = `完成 (${doneEvt.elapsed}s)`;
-          } else {
-            throw new Error('未收到 VLM 回應');
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop();
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              const evt = JSON.parse(line.slice(6));
+              if (evt.event === 'progress') {
+                status.textContent = `批次 ${evt.batch + 1}/${evt.totalBatches} (${evt.elapsed}s)`;
+              } else if (evt.event === 'done') {
+                dataAnswers.rows = evt.rows;
+                dataAnswers.columns = columns;
+                btn.disabled = false;
+                renderDataPanel();
+                const newStatus = document.getElementById('dataVlmStatus');
+                if (newStatus) newStatus.textContent = `完成 (${evt.elapsed}s)`;
+                return;
+              } else if (evt.event === 'error') {
+                throw new Error(evt.message);
+              }
+            }
           }
         } catch (e) {
           status.textContent = '失敗: ' + e.message;
