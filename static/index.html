@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 40 40' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 6a2 2 0 012-2h12l6 6v20a2 2 0 01-2 2H6a2 2 0 01-2-2V6z' stroke='%233b82f6' stroke-width='1.8'/%3E%3Cpath d='M18 4v6h6' stroke='%233b82f6' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M9 16h10M9 20h8M9 24h6' stroke='%233b82f6' stroke-width='1.4' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='22' r='10' stroke='%23eab308' stroke-width='2.2' fill='rgba(234,179,8,0.06)'/%3E%3Cline x1='31' y1='29' x2='38' y2='36' stroke='%23eab308' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -2906,11 +2907,17 @@
         html += '<button class="data-add-btn" id="dataAddRow">+ Row</button>';
 
         // === Section D: Action buttons ===
-        html += '<div style="display:flex;gap:8px;margin-top:16px;">';
+        html += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">';
         html += '<button class="vlm-detail-btn btn-green" id="dataSaveBtn">儲存</button>';
         html += '<button class="vlm-detail-btn btn-blue" id="dataCopyBtn">另存</button>';
         html += '<button class="vlm-detail-btn btn-amber" id="dataRevertBtn">復原</button>';
         html += '<button class="vlm-detail-btn btn-red" id="dataDeleteBtn">刪除</button>';
+        html += '<span style="flex:1;"></span>';
+        html += '<button class="vlm-detail-btn btn-blue" id="dataExportExcel">匯出 Excel</button>';
+        html += '<button class="vlm-detail-btn btn-blue" id="dataExportJson">匯出 JSON</button>';
+        html += '</div>';
+        html += '<div style="display:flex;gap:8px;margin-top:8px;">';
+        html += '<label class="vlm-detail-btn btn-amber" style="cursor:pointer;"><input type="file" id="dataImportFile" accept=".xlsx,.xls,.json" style="display:none;">匯入 Excel / JSON</label>';
         html += '</div>';
 
         // === Section E: VLM 訂正 ===
@@ -3089,6 +3096,78 @@
           dataAnswers = isVlm ? { ...data, fields: data.fields || [], _source: 'vlm' } : data;
           renderDataPanel();
         } catch (e) { alert('復原失敗: ' + e.message); }
+      });
+
+      // Export Excel (.xlsx)
+      document.getElementById('dataExportExcel')?.addEventListener('click', () => {
+        if (!dataAnswers) return;
+        dataCollectEdits();
+        const cols = dataAnswers.columns
+          ? dataAnswers.columns.split(',').map(c => c.trim()).filter(Boolean)
+          : Object.keys((dataAnswers.rows || [])[0] || {}).filter(k => !k.startsWith('_'));
+        const rows = dataAnswers.rows || [];
+        const sheetData = [cols, ...rows.map(r => cols.map(c => r[c] || ''))];
+        const ws = XLSX.utils.aoa_to_sheet(sheetData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Data');
+        XLSX.writeFile(wb, (dataAnswers.name || 'data') + '.xlsx');
+      });
+
+      // Export JSON
+      document.getElementById('dataExportJson')?.addEventListener('click', () => {
+        if (!dataAnswers) return;
+        dataCollectEdits();
+        const exportData = { ...dataAnswers };
+        delete exportData._source;
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (dataAnswers.name || 'data') + '.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+
+      // Import Excel / JSON
+      document.getElementById('dataImportFile')?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
+
+        if (ext === 'json') {
+          try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            if (data.rows && Array.isArray(data.rows)) {
+              dataAnswers = data;
+              if (!dataAnswers._source) dataAnswers._source = 'data';
+            } else if (Array.isArray(data)) {
+              dataAnswers = dataAnswers || { name: '', fields: [], rows: [], columns: '', source: 'manual' };
+              dataAnswers.rows = data;
+              dataAnswers.columns = Object.keys(data[0] || {}).filter(k => !k.startsWith('_')).join(', ');
+            }
+            renderDataPanel();
+          } catch (err) { alert('JSON 解析失敗: ' + err.message); }
+        } else if (ext === 'xlsx' || ext === 'xls') {
+          try {
+            const buf = await file.arrayBuffer();
+            const wb = XLSX.read(buf, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(ws, { defval: '' });
+            if (!jsonData.length) { alert('檔案內容為空'); return; }
+            dataAnswers = dataAnswers || { name: '', fields: [], rows: [], columns: '', source: 'manual' };
+            dataAnswers.rows = jsonData.map(r => {
+              const row = {};
+              Object.keys(r).forEach(k => { row[k] = String(r[k]); });
+              return row;
+            });
+            dataAnswers.columns = Object.keys(jsonData[0]).join(', ');
+            if (!dataAnswers.name) dataAnswers.name = file.name.replace(/\.[^.]+$/, '');
+            renderDataPanel();
+          } catch (err) { alert('Excel 解析失敗: ' + err.message); }
+        } else {
+          alert('不支援的檔案格式，請使用 .json 或 .xlsx/.xls');
+        }
+        e.target.value = '';
       });
 
       // VLM 訂正
