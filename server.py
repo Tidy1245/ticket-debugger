@@ -728,8 +728,11 @@ async def vlm_correct_answer(body: VLMCorrectRequest):
         raise HTTPException(400, "Columns and rules are required")
 
     all_rows = body.rows or []
+    # Filter rows to only include specified columns
+    col_keys = [c.strip() for c in body.columns.split(",") if c.strip()]
+    filtered_rows = [{k: row.get(k, "") for k in col_keys} for row in all_rows]
     # Split into batches
-    batches = [all_rows[i:i + VLM_CORRECT_BATCH] for i in range(0, len(all_rows), VLM_CORRECT_BATCH)]
+    batches = [filtered_rows[i:i + VLM_CORRECT_BATCH] for i in range(0, len(filtered_rows), VLM_CORRECT_BATCH)]
     if not batches:
         batches = [[]]
 
@@ -781,8 +784,16 @@ async def vlm_correct_answer(body: VLMCorrectRequest):
                 elapsed = round(time.time() - t0, 1)
                 yield f"data: {json.dumps({'event': 'progress', 'batch': bi, 'totalBatches': len(batches), 'elapsed': elapsed})}\n\n"
 
+        # Merge corrected columns back into original rows
+        merged = []
+        for i, orig in enumerate(all_rows):
+            row = dict(orig)  # copy original
+            if i < len(corrected):
+                row.update(corrected[i])  # overwrite only corrected columns
+            merged.append(row)
+
         elapsed = round(time.time() - t0, 1)
-        yield f"data: {json.dumps({'event': 'done', 'rows': corrected, 'elapsed': elapsed})}\n\n"
+        yield f"data: {json.dumps({'event': 'done', 'rows': merged, 'elapsed': elapsed})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
