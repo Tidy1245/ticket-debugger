@@ -698,9 +698,9 @@ class VLMCorrectRequest(BaseModel):
 
 
 def build_correct_prompt(rules: str, columns: str, rows: list) -> str:
-    """Build VLM prompt for correcting existing table data."""
+    """Build prompt for correcting existing table data (text-only, no image)."""
     rows_json = json.dumps(rows, ensure_ascii=False, indent=2)
-    return f"""你是文件校對助手。以下是從文件中提取的表格資料，請對照圖片仔細核對每個欄位，修正錯誤。
+    return f"""你是資料校對助手。以下是表格資料，請根據修改規則修正每個欄位的值。
 
 修改規則：
 {rules}
@@ -712,62 +712,28 @@ def build_correct_prompt(rules: str, columns: str, rows: list) -> str:
 
 請輸出修正後的完整 JSON 陣列，格式同上。
 重要規則：
-- 仔細對照圖片，修正任何錯誤的值
-- 如果值正確則保持不變
-- 如果圖片中看不到某值，保留原值
+- 根據修改規則修正欄位值
+- 如果值已正確則保持不變
 - 只輸出 JSON，不要其他文字"""
 
 
-@app.post("/api/tickets/{ticket_id}/vlm-correct")
-async def vlm_correct_answer(request: Request, ticket_id: str, body: VLMCorrectRequest):
-    """Run VLM to correct existing table data by comparing with images. SSE stream."""
-    ip = get_ip(request)
-    touch_ip(ip)
-    config_path = ip_dir(ip) / ticket_id / "config.json"
-    if not config_path.exists():
-        raise HTTPException(404, "Ticket not found")
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    reg_list = data.get("regList", [])
-    ticket_dir = ip_dir(ip) / ticket_id
-
+@app.post("/api/vlm-correct")
+async def vlm_correct_answer(body: VLMCorrectRequest):
+    """Run VLM to correct existing table data (text-only, no image needed)."""
     if not body.columns or not body.rules:
         raise HTTPException(400, "Columns and rules are required")
 
-    # Collect all processor images
-    img_paths = []
-    for reg in reg_list:
-        img_filename = reg.get("inputList", [{}])[0].get("path")
-        if img_filename:
-            img_path = ticket_dir / img_filename
-            if img_path.exists():
-                img_paths.append(img_path)
-
-    if not img_paths:
-        raise HTTPException(400, "No images found")
+    prompt = build_correct_prompt(body.rules, body.columns, body.rows)
 
     async def event_stream():
         t0 = time.time()
         yield f"data: {json.dumps({'event': 'init'})}\n\n"
 
-        # Concatenate all images into one vertical strip
-        img_b64 = concat_images_b64(img_paths)
-        if not img_b64:
-            yield f"data: {json.dumps({'event': 'error', 'message': 'Failed to load images'})}\n\n"
-            return
-
-        prompt = build_correct_prompt(body.rules, body.columns, body.rows)
-
         try:
             async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
                 resp = await client.post(VLM_URL, json={
                     "model": VLM_MODEL,
-                    "messages": [{"role": "user", "content": [
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
-                        {"type": "text", "text": prompt},
-                    ]}],
+                    "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 8000,
                     "temperature": 0.1,
                 })

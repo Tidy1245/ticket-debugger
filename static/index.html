@@ -2905,7 +2905,7 @@
         html += '</div>';
 
         // === Section E: VLM 訂正 ===
-        if ((dataAnswers.rows || []).length && currentTicket) {
+        if ((dataAnswers.rows || []).length) {
           html += '<div class="data-section" style="margin-top:16px;"><div class="data-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--accent-purple);"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>VLM 訂正</div>';
           html += '<div class="vlm-field full" style="margin-bottom:8px;"><label>欄位 (Columns)</label><input type="text" id="dataVlmColumns" value="' + escHtml(dataAnswers.columns || '') + '" placeholder="col1, col2, ..."></div>';
           html += '<div class="vlm-field full" style="margin-bottom:12px;"><label>修改規則（告訴 VLM 如何校對每個欄位）</label><textarea id="dataVlmRules" rows="3" placeholder="描述每個欄位的校對規則..."></textarea></div>';
@@ -3069,7 +3069,7 @@
 
       // VLM 訂正
       document.getElementById('dataVlmCorrectBtn')?.addEventListener('click', async () => {
-        if (!dataAnswers || !currentTicket) return;
+        if (!dataAnswers) return;
         dataCollectEdits();
         const columns = document.getElementById('dataVlmColumns')?.value?.trim() || dataAnswers.columns || '';
         const rules = document.getElementById('dataVlmRules')?.value?.trim() || '';
@@ -3081,7 +3081,7 @@
         status.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent-purple);border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span>VLM 處理中...';
 
         try {
-          const resp = await fetch(`/api/tickets/${currentTicket}/vlm-correct`, {
+          const resp = await fetch('/api/vlm-correct', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ columns, rules, rows: dataAnswers.rows || [] }),
           });
