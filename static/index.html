@@ -3085,35 +3085,27 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ columns, rules, rows: dataAnswers.rows || [] }),
           });
-          if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+          if (!resp.ok) {
+            let detail = resp.statusText;
+            try { detail = (await resp.json()).detail || detail; } catch {}
+            throw new Error(`${resp.status}: ${detail}`);
+          }
 
-          const reader = resp.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue;
-              const evt = JSON.parse(line.slice(6));
-              if (evt.event === 'done') {
-                dataAnswers.rows = evt.rows;
-                dataAnswers.columns = columns;
-                status.textContent = `完成 (${evt.elapsed}s)`;
-                btn.disabled = false;
-                renderDataPanel();
-                // Restore status text after re-render
-                const newStatus = document.getElementById('dataVlmStatus');
-                if (newStatus) newStatus.textContent = `完成 (${evt.elapsed}s)`;
-                return;
-              } else if (evt.event === 'error') {
-                throw new Error(evt.message);
-              }
-            }
+          const text = await resp.text();
+          // Parse SSE events from response text
+          const events = text.split('\n').filter(l => l.startsWith('data: ')).map(l => JSON.parse(l.slice(6)));
+          const errEvt = events.find(e => e.event === 'error');
+          if (errEvt) throw new Error(errEvt.message);
+          const doneEvt = events.find(e => e.event === 'done');
+          if (doneEvt) {
+            dataAnswers.rows = doneEvt.rows;
+            dataAnswers.columns = columns;
+            btn.disabled = false;
+            renderDataPanel();
+            const newStatus = document.getElementById('dataVlmStatus');
+            if (newStatus) newStatus.textContent = `完成 (${doneEvt.elapsed}s)`;
+          } else {
+            throw new Error('未收到 VLM 回應');
           }
         } catch (e) {
           status.textContent = '失敗: ' + e.message;
