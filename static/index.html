@@ -1268,7 +1268,8 @@
               </div>
             </div>
             <div class="vc-save-bar" id="vcSaveBar" style="display:none;">
-              <button class="vc-save-btn" id="vcSaveAsAnswer">Save as Answer</button>
+              <button class="vlm-detail-btn btn-green" id="vcSaveAsAnswer">儲存</button>
+              <button class="vlm-detail-btn btn-amber" id="vcRevertEdit">復原</button>
             </div>
           </div>
 
@@ -2743,7 +2744,7 @@
       vcRenderHighlight();
     }
 
-    // VC Save as Answer
+    // VC Save (edit mode)
     document.getElementById('vcSaveAsAnswer')?.addEventListener('click', async () => {
       const existingNames = [...(vlmAnswersList || []).map(a => a.name), ...dataAnswersList.map(a => a.name)];
       const defaultName = deduplicateName(`${currentTicket || 'answer'}_vc`, existingNames);
@@ -2755,7 +2756,6 @@
       const tables = ticketData.tables || [];
       const { fieldItems, rowItems } = vcBuildFieldItems(areas, tables);
 
-      // Collect fields from DOM (may be edited)
       const fields = [];
       document.querySelectorAll('#vcTableContent .vc-field-item[data-type="field"]').forEach(el => {
         const key = el.querySelector('.vc-field-label')?.textContent || '';
@@ -2763,7 +2763,6 @@
         fields.push({ key, value });
       });
 
-      // Collect rows from DOM (may be edited)
       const rows = [];
       const headers = tables[0]?.headers || [];
       rowItems.forEach((row, ri) => {
@@ -2786,8 +2785,24 @@
         });
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
         await loadDataAnswersList();
+        // Exit edit mode
+        vcEditMode = false;
+        document.getElementById('vcEditToggle')?.classList.remove('active');
+        document.getElementById('vcSaveBar').style.display = 'none';
+        document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => el.removeAttribute('contenteditable'));
         alert(`答案「${finalName}」已儲存`);
       } catch (e) { alert('儲存失敗: ' + e.message); }
+    });
+
+    // VC Revert (edit mode — re-render table to discard edits)
+    document.getElementById('vcRevertEdit')?.addEventListener('click', () => {
+      vcRenderTable();
+      // Re-apply contenteditable since we're still in edit mode
+      if (vcEditMode) {
+        document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => {
+          el.contentEditable = 'true';
+        });
+      }
     });
 
     // --- Data Management ---
@@ -2888,6 +2903,17 @@
         html += '<button class="vlm-detail-btn btn-amber" id="dataRevertBtn">復原</button>';
         html += '<button class="vlm-detail-btn btn-red" id="dataDeleteBtn">刪除</button>';
         html += '</div>';
+
+        // === Section E: VLM 訂正 ===
+        if ((dataAnswers.rows || []).length && currentTicket) {
+          html += '<div class="data-section" style="margin-top:16px;"><div class="data-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--accent-purple);"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>VLM 訂正</div>';
+          html += '<div class="vlm-field full" style="margin-bottom:8px;"><label>欄位 (Columns)</label><input type="text" id="dataVlmColumns" value="' + escHtml(dataAnswers.columns || '') + '" placeholder="col1, col2, ..."></div>';
+          html += '<div class="vlm-field full" style="margin-bottom:12px;"><label>修改規則（告訴 VLM 如何校對每個欄位）</label><textarea id="dataVlmRules" rows="3" placeholder="描述每個欄位的校對規則..."></textarea></div>';
+          html += '<div class="vlm-actions">';
+          html += '<button class="vlm-btn" id="dataVlmCorrectBtn" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);box-shadow:0 0 12px rgba(139,92,246,0.3);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>執行 VLM 訂正</button>';
+          html += '<span id="dataVlmStatus" style="font-size:12px;color:var(--text-muted);"></span>';
+          html += '</div></div>';
+        }
       } else {
         html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">選擇或新增一個 Data Answer。</p>';
       }
@@ -3039,6 +3065,60 @@
           dataAnswers = isVlm ? { ...data, fields: data.fields || [], _source: 'vlm' } : data;
           renderDataPanel();
         } catch (e) { alert('復原失敗: ' + e.message); }
+      });
+
+      // VLM 訂正
+      document.getElementById('dataVlmCorrectBtn')?.addEventListener('click', async () => {
+        if (!dataAnswers || !currentTicket) return;
+        dataCollectEdits();
+        const columns = document.getElementById('dataVlmColumns')?.value?.trim() || dataAnswers.columns || '';
+        const rules = document.getElementById('dataVlmRules')?.value?.trim() || '';
+        if (!columns || !rules) { alert('請填寫欄位和修改規則'); return; }
+
+        const btn = document.getElementById('dataVlmCorrectBtn');
+        const status = document.getElementById('dataVlmStatus');
+        btn.disabled = true;
+        status.innerHTML = '<span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent-purple);border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span>VLM 處理中...';
+
+        try {
+          const resp = await fetch(`/api/tickets/${currentTicket}/vlm-correct`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ columns, rules, rows: dataAnswers.rows || [] }),
+          });
+          if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              const evt = JSON.parse(line.slice(6));
+              if (evt.event === 'done') {
+                dataAnswers.rows = evt.rows;
+                dataAnswers.columns = columns;
+                status.textContent = `完成 (${evt.elapsed}s)`;
+                btn.disabled = false;
+                renderDataPanel();
+                // Restore status text after re-render
+                const newStatus = document.getElementById('dataVlmStatus');
+                if (newStatus) newStatus.textContent = `完成 (${evt.elapsed}s)`;
+                return;
+              } else if (evt.event === 'error') {
+                throw new Error(evt.message);
+              }
+            }
+          }
+        } catch (e) {
+          status.textContent = '失敗: ' + e.message;
+          btn.disabled = false;
+        }
       });
     }
 
