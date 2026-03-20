@@ -733,7 +733,7 @@ async def vlm_correct_answer(body: VLMCorrectRequest):
             async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
                 resp = await client.post(VLM_URL, json={
                     "model": VLM_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
                     "max_tokens": 8000,
                     "temperature": 0.1,
                 })
