@@ -3107,7 +3107,6 @@
                 status.textContent = `批次 ${evt.batch + 1}/${evt.totalBatches} (${evt.elapsed}s)`;
               } else if (evt.event === 'done') {
                 dataAnswers.rows = evt.rows;
-                dataAnswers.columns = columns;
                 btn.disabled = false;
                 renderDataPanel();
                 const newStatus = document.getElementById('dataVlmStatus');
