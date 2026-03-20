@@ -2813,10 +2813,22 @@
 
       html += '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;">';
       html += '<div class="vlm-field" style="flex:3;"><label>已儲存答案</label><select id="dataAnswerSelect"><option value="">— 選擇答案 —</option>';
-      dataAnswersList.forEach(a => {
-        const sel = dataAnswers && dataAnswers.name === a.name ? ' selected' : '';
-        html += `<option value="${escHtml(a.name)}"${sel}>${escHtml(a.name)} (${a.fieldCount}F / ${a.rowCount}R)</option>`;
-      });
+      if (dataAnswersList.length) {
+        html += '<optgroup label="Data 答案">';
+        dataAnswersList.forEach(a => {
+          const sel = dataAnswers && dataAnswers._source !== 'vlm' && dataAnswers.name === a.name ? ' selected' : '';
+          html += `<option value="data:${escHtml(a.name)}"${sel}>${escHtml(a.name)} (${a.fieldCount}F / ${a.rowCount}R)</option>`;
+        });
+        html += '</optgroup>';
+      }
+      if (vlmAnswersList.length) {
+        html += '<optgroup label="VLM 答案">';
+        vlmAnswersList.forEach(a => {
+          const sel = dataAnswers && dataAnswers._source === 'vlm' && dataAnswers.name === a.name ? ' selected' : '';
+          html += `<option value="vlm:${escHtml(a.name)}"${sel}>${escHtml(a.name)} (${a.rowCount} rows)</option>`;
+        });
+        html += '</optgroup>';
+      }
       html += '</select></div>';
       if (dataAnswers) {
         html += `<div class="vlm-field" style="flex:1;"><label>名稱</label><input type="text" id="dataAnswerName" value="${escHtml(dataAnswers.name || '')}"></div>`;
@@ -2879,8 +2891,19 @@
 
       // === Attach events ===
       document.getElementById('dataAnswerSelect')?.addEventListener('change', async (e) => {
-        const name = e.target.value;
-        if (name) { await loadDataAnswerByName(name); } else { dataAnswers = null; }
+        const val = e.target.value;
+        if (val.startsWith('data:')) {
+          await loadDataAnswerByName(val.slice(5));
+          if (dataAnswers) dataAnswers._source = 'data';
+        } else if (val.startsWith('vlm:')) {
+          const name = val.slice(4);
+          try {
+            const data = await fetchJSON(`/api/vlm-answers/${encodeURIComponent(name)}`);
+            dataAnswers = { ...data, fields: [], _source: 'vlm' };
+          } catch { dataAnswers = null; }
+        } else {
+          dataAnswers = null;
+        }
         renderDataPanel();
       });
 
@@ -2938,16 +2961,19 @@
         if (!newName) { alert('請輸入名稱'); return; }
         const oldName = dataAnswers.name;
         dataAnswers.name = newName;
+        const isVlm = dataAnswers._source === 'vlm';
+        const apiBase = isVlm ? '/api/vlm-answers' : '/api/data-answers';
         try {
-          const res = await fetch(`/api/data-answers/${encodeURIComponent(newName)}`, {
+          const res = await fetch(`${apiBase}/${encodeURIComponent(newName)}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dataAnswers),
           });
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           if (oldName && oldName !== newName) {
-            await fetch(`/api/data-answers/${encodeURIComponent(oldName)}`, { method: 'DELETE' }).catch(() => {});
+            await fetch(`${apiBase}/${encodeURIComponent(oldName)}`, { method: 'DELETE' }).catch(() => {});
           }
           await loadDataAnswersList();
+          if (isVlm) await loadVlmAnswersList();
           alert(`答案「${newName}」已儲存`);
           renderDataPanel();
         } catch (e) { alert('儲存失敗: ' + e.message); }
@@ -2956,11 +2982,14 @@
       document.getElementById('dataDeleteBtn')?.addEventListener('click', async () => {
         if (!dataAnswers || !dataAnswers.name) return;
         if (!confirm(`確定刪除答案「${dataAnswers.name}」？`)) return;
+        const isVlm = dataAnswers._source === 'vlm';
+        const apiBase = isVlm ? '/api/vlm-answers' : '/api/data-answers';
         try {
-          const res = await fetch(`/api/data-answers/${encodeURIComponent(dataAnswers.name)}`, { method: 'DELETE' });
+          const res = await fetch(`${apiBase}/${encodeURIComponent(dataAnswers.name)}`, { method: 'DELETE' });
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           dataAnswers = null;
           await loadDataAnswersList();
+          if (isVlm) await loadVlmAnswersList();
           alert('已刪除');
           renderDataPanel();
         } catch (e) { alert('刪除失敗: ' + e.message); }
@@ -3348,7 +3377,9 @@
       const vlmRows = vlmAnswers.rows || [];
       const skipCols = vlmAnswers.skipColumns || [];
       const colStr = vlmAnswers.columns || '';
-      const colKeys = colStr ? colStr.split(',').map(c => c.trim()).filter(c => !skipCols.includes(c)) : [];
+      const colKeys = colStr
+        ? colStr.split(',').map(c => c.trim()).filter(c => c && !skipCols.includes(c))
+        : Object.keys(vlmRows[0] || {}).filter(k => !k.startsWith('_') && !skipCols.includes(k));
 
       const results = [];
       const maxRows = Math.max(pipelineRows.length, vlmRows.length);
