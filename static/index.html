@@ -1091,12 +1091,22 @@
       line-height: 1.5;
     }
 
+    /* Data Mgmt floating button */
+    .data-mgmt-btn { position: fixed; top: 12px; right: 16px; z-index: 1000; width: 36px; height: 36px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all var(--transition); padding: 4px; }
+    .data-mgmt-btn:hover { border-color: var(--accent-blue); box-shadow: var(--glow-blue); }
+    .data-mgmt-btn.active { border-color: var(--accent-amber); box-shadow: var(--glow-amber); }
+    .data-mgmt-btn img { width: 24px; height: 24px; }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
     }
   </style>
 </head>
 <body>
+  <!-- Data Mgmt floating button -->
+  <button class="data-mgmt-btn" id="dataMgmtBtn" title="Data Management">
+    <img src="data:image/png;base64,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" alt="Data Mgmt">
+  </button>
   <div class="app">
     <!-- Sidebar -->
     <aside class="sidebar">
@@ -1202,7 +1212,6 @@
           <div class="tab" data-tab="vlm">VLM Grouping</div>
           <div class="tab" data-tab="check">VLM Answer</div>
           <div class="tab" data-tab="visual">Visual Check</div>
-          <div class="tab" data-tab="data">Data Mgmt</div>
         </div>
         <div class="content">
           <!-- Overview Panel -->
@@ -1283,11 +1292,11 @@
             </div>
           </div>
 
-          <!-- Data Management Panel -->
-          <div class="panel" id="panelData" style="overflow-y:auto;padding:20px;">
-            <div id="dataContent"></div>
-          </div>
         </div>
+      </div>
+      <!-- Data Management Panel (independent, toggled by floating button) -->
+      <div id="panelData" style="display:none;flex-direction:column;flex:1;overflow-y:auto;padding:20px;">
+        <div id="dataContent"></div>
       </div>
     </main>
   </div>
@@ -1312,6 +1321,7 @@
     async function init() {
       const tickets = await fetchJSON('/api/tickets');
       renderTicketList(tickets);
+      await loadDataAnswersList();
     }
 
     function renderTicketList(tickets) {
@@ -1343,6 +1353,8 @@
     function goHome() {
       currentTicket = null;
       document.getElementById('ticketView').style.display = 'none';
+      document.getElementById('panelData').style.display = 'none';
+      document.getElementById('dataMgmtBtn').classList.remove('active');
       document.getElementById('homePage').style.display = '';
       document.querySelectorAll('.ticket-item').forEach(el => el.classList.remove('active'));
     }
@@ -1380,6 +1392,8 @@
 
       document.getElementById('homePage').style.display = 'none';
       document.getElementById('ticketView').style.display = 'flex';
+      document.getElementById('panelData').style.display = 'none';
+      document.getElementById('dataMgmtBtn').classList.remove('active');
 
       // Show loading
       document.getElementById('infoGrid').innerHTML = '<div class="loading"><div class="spinner"></div>Loading...</div>';
@@ -1399,12 +1413,16 @@
     }
 
     // --- Tabs ---
+    let prevActiveTab = 'overview';
     document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById(`panel${capitalize(tab.dataset.tab)}`).classList.add('active');
+        prevActiveTab = tab.dataset.tab;
+        document.getElementById('dataMgmtBtn').classList.remove('active');
+        document.getElementById('panelData').style.display = 'none';
         // Re-apply zoom when switching to Images tab (viewport may have been hidden)
         if (tab.dataset.tab === 'images') {
           const img = document.getElementById('pageImg');
@@ -1418,6 +1436,27 @@
           requestAnimationFrame(() => vcRenderHighlight());
         }
       });
+    });
+
+    // Data Mgmt floating button
+    document.getElementById('dataMgmtBtn').addEventListener('click', () => {
+      const btn = document.getElementById('dataMgmtBtn');
+      const dataPanel = document.getElementById('panelData');
+      const isActive = btn.classList.contains('active');
+      if (isActive) {
+        // Hide data panel, restore previous view
+        btn.classList.remove('active');
+        dataPanel.style.display = 'none';
+        document.getElementById('homePage').style.display = currentTicket ? 'none' : '';
+        document.getElementById('ticketView').style.display = currentTicket ? 'flex' : 'none';
+      } else {
+        // Show data panel, hide home/ticket
+        btn.classList.add('active');
+        document.getElementById('homePage').style.display = 'none';
+        document.getElementById('ticketView').style.display = 'none';
+        dataPanel.style.display = 'flex';
+        renderDataPanel();
+      }
     });
 
     function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
