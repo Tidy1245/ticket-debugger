@@ -300,6 +300,14 @@
     .data-source-tag.visual-check { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
     .data-source-tag.vlm-answer { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
 
+    /* Tag selector */
+    .tag-selector { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 4px; min-height: 32px; }
+    .tag-selector:focus-within { border-color: var(--accent-blue); }
+    .tag-item { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); font-size: 11px; font-family: 'Fira Code', monospace; border-radius: 3px; }
+    .tag-item .tag-remove { cursor: pointer; opacity: 0.6; font-size: 13px; line-height: 1; }
+    .tag-item .tag-remove:hover { opacity: 1; }
+    .tag-selector select { border: none; background: transparent; color: var(--text-muted); font-size: 11px; font-family: 'Fira Code', monospace; outline: none; cursor: pointer; padding: 0; flex-shrink: 0; }
+
     /* Table-Image Position mode selector */
     .tip-mode { display: flex; align-items: center; gap: 2px; }
     .tip-btn { padding: 3px 8px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 11px; font-family: 'Fira Code', monospace; cursor: pointer; transition: all var(--transition); }
@@ -1349,7 +1357,7 @@
       cellHighlightData = null;
       vlmResult = null; vlmActiveGroup = -1; vlmHighlightAreas = [];
       vlmAnswers = null; vlmAnswersList = []; checkCompareResult = null;
-      dataAnswers = null; dataAnswersList = [];
+      dataAnswers = null; dataAnswersList = []; dataVlmSelectedCols = [];
       // Restore background check state if this ticket has one running
       const bgState = checkBgState.get(id);
       if (bgState && bgState.loading) {
@@ -2362,6 +2370,7 @@
     // --- Data Management ---
     let dataAnswers = null;
     let dataAnswersList = [];
+    let dataVlmSelectedCols = [];
 
     // --- Visual Check ---
     let vcPageIndex = 0;
@@ -2907,7 +2916,21 @@
         // === Section E: VLM 訂正 ===
         if ((dataAnswers.rows || []).length) {
           html += '<div class="data-section" style="margin-top:16px;"><div class="data-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--accent-purple);"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>VLM 訂正</div>';
-          html += '<div class="vlm-field full" style="margin-bottom:8px;"><label>欄位 (Columns)</label><input type="text" id="dataVlmColumns" value="' + escHtml(dataAnswers.columns || '') + '" placeholder="col1, col2, ..."></div>';
+          // Build available columns from rows keys or dataAnswers.columns
+          const allCols = dataAnswers.columns
+            ? dataAnswers.columns.split(',').map(c => c.trim()).filter(Boolean)
+            : Object.keys((dataAnswers.rows || [])[0] || {}).filter(k => !k.startsWith('_'));
+          const availCols = allCols.filter(c => !dataVlmSelectedCols.includes(c));
+
+          html += '<div class="vlm-field full" style="margin-bottom:8px;"><label>訂正欄位</label>';
+          html += '<div class="tag-selector" id="dataVlmTagSelector">';
+          dataVlmSelectedCols.forEach(col => {
+            html += `<span class="tag-item">${escHtml(col)}<span class="tag-remove" data-col="${escHtml(col)}">&times;</span></span>`;
+          });
+          html += '<select id="dataVlmColSelect"><option value="">+ 選擇欄位</option>';
+          availCols.forEach(c => { html += `<option value="${escHtml(c)}">${escHtml(c)}</option>`; });
+          html += '</select>';
+          html += '</div></div>';
           html += '<div class="vlm-field full" style="margin-bottom:12px;"><label>修改規則（告訴 VLM 如何校對每個欄位）</label><textarea id="dataVlmRules" rows="3" placeholder="描述每個欄位的校對規則..."></textarea></div>';
           html += '<div class="vlm-actions">';
           html += '<button class="vlm-btn" id="dataVlmCorrectBtn" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);box-shadow:0 0 12px rgba(139,92,246,0.3);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>執行 VLM 訂正</button>';
@@ -2924,6 +2947,7 @@
       // === Attach events ===
       document.getElementById('dataAnswerSelect')?.addEventListener('change', async (e) => {
         const val = e.target.value;
+        dataVlmSelectedCols = [];
         if (val.startsWith('data:')) {
           await loadDataAnswerByName(val.slice(5));
           if (dataAnswers) dataAnswers._source = 'data';
@@ -3068,12 +3092,38 @@
       });
 
       // VLM 訂正
+      // Tag selector: add column
+      document.getElementById('dataVlmColSelect')?.addEventListener('change', (e) => {
+        const col = e.target.value;
+        if (col && !dataVlmSelectedCols.includes(col)) {
+          dataVlmSelectedCols.push(col);
+          dataCollectEdits();
+          const rulesVal = document.getElementById('dataVlmRules')?.value || '';
+          renderDataPanel();
+          const rulesEl = document.getElementById('dataVlmRules');
+          if (rulesEl) rulesEl.value = rulesVal;
+        }
+      });
+      // Tag selector: remove column
+      document.querySelectorAll('#dataVlmTagSelector .tag-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const col = btn.dataset.col;
+          dataVlmSelectedCols = dataVlmSelectedCols.filter(c => c !== col);
+          dataCollectEdits();
+          const rulesVal = document.getElementById('dataVlmRules')?.value || '';
+          renderDataPanel();
+          const rulesEl = document.getElementById('dataVlmRules');
+          if (rulesEl) rulesEl.value = rulesVal;
+        });
+      });
+
       document.getElementById('dataVlmCorrectBtn')?.addEventListener('click', async () => {
         if (!dataAnswers) return;
         dataCollectEdits();
-        const columns = document.getElementById('dataVlmColumns')?.value?.trim() || dataAnswers.columns || '';
+        const columns = dataVlmSelectedCols.join(', ');
         const rules = document.getElementById('dataVlmRules')?.value?.trim() || '';
-        if (!columns || !rules) { alert('請填寫欄位和修改規則'); return; }
+        if (!columns) { alert('請選擇要訂正的欄位'); return; }
+        if (!rules) { alert('請填寫修改規則'); return; }
 
         const btn = document.getElementById('dataVlmCorrectBtn');
         const status = document.getElementById('dataVlmStatus');
