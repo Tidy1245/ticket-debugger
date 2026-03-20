@@ -740,7 +740,9 @@ async def vlm_correct_answer(body: VLMCorrectRequest):
                     "max_tokens": 8000,
                     "temperature": 0.1,
                 })
-                resp.raise_for_status()
+                if resp.status_code != 200:
+                    err_detail = resp.text[:500]
+                    raise Exception(f"VLM {resp.status_code}: {err_detail}")
                 content = resp.json()["choices"][0]["message"]["content"]
 
                 # Parse JSON
