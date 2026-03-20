@@ -199,9 +199,13 @@
     .vlm-detail-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 10px; }
     .vlm-detail-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .vlm-detail-actions { display: flex; gap: 8px; margin-top: 10px; }
-    .vlm-detail-btn { padding: 6px 14px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); font-size: 12px; font-family: 'Fira Code', monospace; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all var(--transition); }
-    .vlm-detail-btn:hover { border-color: #7c3aed; color: #8b5cf6; }
+    .vlm-detail-btn { padding: 6px 14px; border: 1px solid var(--btn-color, var(--border)); background: transparent; color: var(--btn-color, var(--text-secondary)); font-size: 12px; font-family: 'Fira Code', monospace; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all var(--transition); }
+    .vlm-detail-btn:hover { background: color-mix(in srgb, var(--btn-color, var(--text-secondary)) 15%, transparent); filter: brightness(1.3); }
     .vlm-detail-btn svg { width: 14px; height: 14px; }
+    .vlm-detail-btn.btn-green { --btn-color: var(--accent-green); }
+    .vlm-detail-btn.btn-red { --btn-color: var(--accent-red); }
+    .vlm-detail-btn.btn-blue { --btn-color: var(--accent-blue); }
+    .vlm-detail-btn.btn-amber { --btn-color: var(--accent-amber); }
     .vlm-highlight { position: absolute; border: 2px solid #8b5cf6; background: rgba(139, 92, 246, 0.12); pointer-events: none; z-index: 8; border-radius: 2px; }
 
     /* VLM Check Answer */
@@ -2833,7 +2837,7 @@
       if (dataAnswers) {
         html += `<div class="vlm-field" style="flex:1;"><label>名稱</label><input type="text" id="dataAnswerName" value="${escHtml(dataAnswers.name || '')}"></div>`;
       }
-      html += '<button class="vlm-detail-btn" id="dataNewBtn" style="height:30px;font-size:11px;border-color:var(--accent-blue);color:var(--accent-blue);">新增</button>';
+      html += '<button class="vlm-detail-btn btn-blue" id="dataNewBtn" style="height:30px;font-size:11px;">新增</button>';
       html += '</div>';
 
       if (dataAnswers) {
@@ -2879,8 +2883,10 @@
 
         // === Section D: Action buttons ===
         html += '<div style="display:flex;gap:8px;margin-top:16px;">';
-        html += '<button class="vlm-detail-btn" id="dataSaveBtn" style="border-color:var(--accent-green);color:var(--accent-green);">儲存</button>';
-        html += '<button class="vlm-detail-btn" id="dataDeleteBtn" style="color:var(--accent-red);">刪除</button>';
+        html += '<button class="vlm-detail-btn btn-green" id="dataSaveBtn">儲存</button>';
+        html += '<button class="vlm-detail-btn btn-blue" id="dataCopyBtn">另存</button>';
+        html += '<button class="vlm-detail-btn btn-amber" id="dataRevertBtn">復原</button>';
+        html += '<button class="vlm-detail-btn btn-red" id="dataDeleteBtn">刪除</button>';
         html += '</div>';
       } else {
         html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">選擇或新增一個 Data Answer。</p>';
@@ -2993,6 +2999,46 @@
           alert('已刪除');
           renderDataPanel();
         } catch (e) { alert('刪除失敗: ' + e.message); }
+      });
+
+      // 另存 (duplicate with auto-dedup name)
+      document.getElementById('dataCopyBtn')?.addEventListener('click', async () => {
+        if (!dataAnswers) return;
+        dataCollectEdits();
+        const existingNames = [...dataAnswersList.map(a => a.name), ...vlmAnswersList.map(a => a.name)];
+        const defaultName = deduplicateName(dataAnswers.name || 'answer', existingNames);
+        const name = prompt('輸入另存名稱:', defaultName);
+        if (!name) return;
+        const finalName = deduplicateName(name, existingNames);
+        try {
+          const copy = JSON.parse(JSON.stringify(dataAnswers));
+          delete copy._source;
+          copy.name = finalName;
+          const res = await fetch(`/api/data-answers/${encodeURIComponent(finalName)}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(copy),
+          });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+          await loadDataAnswersList();
+          // Switch to the new copy
+          await loadDataAnswerByName(finalName);
+          alert(`已另存為「${finalName}」`);
+          renderDataPanel();
+        } catch (e) { alert('另存失敗: ' + e.message); }
+      });
+
+      // 復原 (revert to last saved state)
+      document.getElementById('dataRevertBtn')?.addEventListener('click', async () => {
+        if (!dataAnswers) return;
+        const name = dataAnswers.name;
+        if (!name) { alert('尚未儲存，無法復原'); return; }
+        const isVlm = dataAnswers._source === 'vlm';
+        try {
+          const apiBase = isVlm ? '/api/vlm-answers' : '/api/data-answers';
+          const data = await fetchJSON(`${apiBase}/${encodeURIComponent(name)}`);
+          dataAnswers = isVlm ? { ...data, fields: data.fields || [], _source: 'vlm' } : data;
+          renderDataPanel();
+        } catch (e) { alert('復原失敗: ' + e.message); }
       });
     }
 
@@ -3427,8 +3473,8 @@
       }
       html += '</select></div>';
       html += '<div class="vlm-field" style="flex:1;"><label>儲存名稱</label><input type="text" id="checkPresetName" placeholder="輸入名稱..."></div>';
-      html += '<button class="vlm-detail-btn" id="presetSaveBtn" title="儲存目前設定為自訂 Preset" style="height:30px;font-size:11px;border-color:var(--accent-green);color:var(--accent-green);">儲存</button>';
-      html += '<button class="vlm-detail-btn" id="presetDeleteBtn" title="刪除選中的自訂 Preset" style="height:30px;font-size:11px;color:var(--accent-red);">刪除</button>';
+      html += '<button class="vlm-detail-btn btn-green" id="presetSaveBtn" title="儲存目前設定為自訂 Preset" style="height:30px;font-size:11px;">儲存</button>';
+      html += '<button class="vlm-detail-btn btn-red" id="presetDeleteBtn" title="刪除選中的自訂 Preset" style="height:30px;font-size:11px;">刪除</button>';
       html += '</div>';
 
       html += '<div class="vlm-grid" style="margin-bottom:12px;">';
@@ -3474,9 +3520,6 @@
         html += '</optgroup>';
       }
       html += '</select></div>';
-      if (vlmAnswers) {
-        html += '<div class="vlm-field" style="flex:1;"><label>儲存名稱</label><input type="text" id="vlmAnswerName" value="' + escHtml(vlmAnswers.name || '') + '"></div>';
-      }
       html += '</div>';
 
       if (vlmAnswers && vlmAnswers.rows && vlmAnswers.rows.length) {
@@ -3484,6 +3527,7 @@
         const colStr = vlmAnswers.columns || '';
         const colKeys = colStr ? colStr.split(',').map(c => c.trim()).filter(c => !skipCols.includes(c)) : Object.keys(vlmAnswers.rows[0] || {}).filter(k => !k.startsWith('_'));
 
+        html += `<div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);">${escHtml(vlmAnswers.name || '')} — ${vlmAnswers.rows.length} rows (唯讀)</div>`;
         html += '<div style="overflow:auto;max-height:400px;margin-bottom:10px;">';
         html += '<table class="check-result-table" id="vlmAnswerTable"><thead><tr><th>#</th>';
         colKeys.forEach(col => { html += `<th>${escHtml(col)}</th>`; });
@@ -3493,19 +3537,13 @@
           html += `<td style="color:var(--text-muted);">${ri}</td>`;
           colKeys.forEach(col => {
             const val = row[col] || '';
-            html += `<td contenteditable="true" class="vlm-editable" data-row="${ri}" data-col="${col}">${escHtml(val)}</td>`;
+            html += `<td>${escHtml(val)}</td>`;
           });
           html += '</tr>';
         });
         html += '</tbody></table></div>';
-
-        html += '<div style="display:flex;gap:8px;">';
-        html += '<button class="vlm-detail-btn" id="vlmSaveBtn" style="border-color:var(--accent-green);color:var(--accent-green);">儲存</button>';
-        html += '<button class="vlm-detail-btn" id="vlmDeleteBtn" style="color:var(--accent-red);">刪除</button>';
-        html += '<button class="vlm-detail-btn" id="vlmCopyToData" style="border-color:var(--accent-blue);color:var(--accent-blue);">另存</button>';
-        html += '</div>';
       } else if (!checkLoading) {
-        html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">尚無 VLM 答案。請先執行 VLM 讀取或從下拉選單載入。</p>';
+        html += '<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">尚無答案。請先執行 VLM 讀取或從下拉選單載入。</p>';
       }
       html += '</div>';
 
@@ -3656,91 +3694,6 @@
         renderCheckPanel();
       });
 
-      // Answer save (routes to VLM or Data API based on source)
-      document.getElementById('vlmSaveBtn')?.addEventListener('click', async () => {
-        if (!vlmAnswers) return;
-        const nameInput = document.getElementById('vlmAnswerName');
-        const newName = nameInput?.value?.trim() || vlmAnswers.name;
-        if (!newName) { alert('請輸入儲存名稱'); return; }
-        // Collect edited values
-        document.querySelectorAll('.vlm-editable').forEach(td => {
-          const ri = parseInt(td.dataset.row);
-          const col = td.dataset.col;
-          if (vlmAnswers.rows[ri]) vlmAnswers.rows[ri][col] = td.textContent;
-        });
-        const oldName = vlmAnswers.name;
-        vlmAnswers.name = newName;
-        const isData = vlmAnswers._source === 'data';
-        const apiBase = isData ? '/api/data-answers' : '/api/vlm-answers';
-        try {
-          const res = await fetch(`${apiBase}/${encodeURIComponent(newName)}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(vlmAnswers),
-          });
-          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
-          if (oldName && oldName !== newName) {
-            await fetch(`${apiBase}/${encodeURIComponent(oldName)}`, { method: 'DELETE' }).catch(() => {});
-          }
-          await loadVlmAnswersList();
-          if (isData) await loadDataAnswersList();
-          alert(`答案「${newName}」已儲存`);
-          renderCheckPanel();
-        } catch (e) { alert('儲存失敗: ' + e.message); }
-      });
-
-      // Answer delete (routes to VLM or Data API based on source)
-      document.getElementById('vlmDeleteBtn')?.addEventListener('click', async () => {
-        if (!vlmAnswers) return;
-        const name = vlmAnswers.name;
-        if (!name) { alert('答案沒有名稱，無法刪除'); return; }
-        if (!confirm(`確定刪除答案「${name}」？`)) return;
-        const isData = vlmAnswers._source === 'data';
-        const apiBase = isData ? '/api/data-answers' : '/api/vlm-answers';
-        try {
-          const res = await fetch(`${apiBase}/${encodeURIComponent(name)}`, { method: 'DELETE' });
-          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
-          vlmAnswers = null;
-          checkCompareResult = null;
-          await loadVlmAnswersList();
-          if (isData) await loadDataAnswersList();
-          alert(`答案「${name}」已刪除`);
-          renderCheckPanel();
-        } catch (e) { alert('刪除失敗: ' + e.message); }
-      });
-
-      // 另存 (copy to Data Answer with auto-dedup name)
-      document.getElementById('vlmCopyToData')?.addEventListener('click', async () => {
-        if (!vlmAnswers) return;
-        const existingNames = [...vlmAnswersList.map(a => a.name), ...dataAnswersList.map(a => a.name)];
-        const defaultName = deduplicateName(vlmAnswers.name || 'answer', existingNames);
-        const name = prompt('輸入答案名稱:', defaultName);
-        if (!name) return;
-        const finalName = deduplicateName(name, existingNames);
-        // Collect edited rows from DOM
-        const editedRows = JSON.parse(JSON.stringify(vlmAnswers.rows || []));
-        document.querySelectorAll('.vlm-editable').forEach(td => {
-          const ri = parseInt(td.dataset.row);
-          const col = td.dataset.col;
-          if (editedRows[ri]) editedRows[ri][col] = td.textContent;
-        });
-        try {
-          const res = await fetch(`/api/data-answers/${encodeURIComponent(finalName)}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ticketId: vlmAnswers.ticketId || currentTicket || '',
-              fields: [],
-              rows: editedRows,
-              columns: vlmAnswers.columns || '',
-              source: 'vlm-answer',
-            }),
-          });
-          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
-          await loadDataAnswersList();
-          await loadVlmAnswersList();
-          alert(`已另存為「${finalName}」`);
-          renderCheckPanel();
-        } catch (e) { alert('儲存失敗: ' + e.message); }
-      });
     }
 
     async function startCheckAnswer() {
