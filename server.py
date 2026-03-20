@@ -736,7 +736,7 @@ async def vlm_correct_answer(request: Request, ticket_id: str, body: VLMCorrectR
     if not body.columns or not body.rules:
         raise HTTPException(400, "Columns and rules are required")
 
-    # Collect all processor images (pair every 2 pages)
+    # Collect all processor images
     img_paths = []
     for reg in reg_list:
         img_filename = reg.get("inputList", [{}])[0].get("path")
@@ -748,37 +748,26 @@ async def vlm_correct_answer(request: Request, ticket_id: str, body: VLMCorrectR
     if not img_paths:
         raise HTTPException(400, "No images found")
 
-    # Pair pages (every 2)
-    pairs = []
-    for i in range(0, len(img_paths), 2):
-        if i + 1 < len(img_paths):
-            pairs.append(img_paths[i:i + 2])
-        else:
-            pairs.append([img_paths[i]])
-
     async def event_stream():
         t0 = time.time()
-        yield f"data: {json.dumps({'event': 'init', 'totalPairs': len(pairs)})}\n\n"
+        yield f"data: {json.dumps({'event': 'init'})}\n\n"
 
-        # Send all images (concatenated per pair) with the data
-        messages_content = []
-        for pair in pairs:
-            img_b64 = concat_images_b64(pair)
-            if img_b64:
-                messages_content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}})
-
-        if not messages_content:
+        # Concatenate all images into one vertical strip
+        img_b64 = concat_images_b64(img_paths)
+        if not img_b64:
             yield f"data: {json.dumps({'event': 'error', 'message': 'Failed to load images'})}\n\n"
             return
 
         prompt = build_correct_prompt(body.rules, body.columns, body.rows)
-        messages_content.append({"type": "text", "text": prompt})
 
         try:
             async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
                 resp = await client.post(VLM_URL, json={
                     "model": VLM_MODEL,
-                    "messages": [{"role": "user", "content": messages_content}],
+                    "messages": [{"role": "user", "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                        {"type": "text", "text": prompt},
+                    ]}],
                     "max_tokens": 8000,
                     "temperature": 0.1,
                 })
