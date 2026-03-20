@@ -734,7 +734,7 @@ async def vlm_correct_answer(body: VLMCorrectRequest):
                 resp = await client.post(VLM_URL, json={
                     "model": VLM_MODEL,
                     "messages": [{"role": "user", "content": [
-                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg=="}},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"}},
                         {"type": "text", "text": prompt},
                     ]}],
                     "max_tokens": 8000,
