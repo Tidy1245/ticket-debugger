@@ -272,8 +272,9 @@
     .vc-field-value .modified-val { color: var(--accent-green); }
     .vc-field-no-loc { opacity: 0.5; cursor: default; }
     .vc-field-no-loc .vc-field-label { color: rgba(245, 158, 11, 0.4); }
-    .vc-cross-page { background: rgba(16, 185, 129, 0.06); }
-    .vc-field-item.vc-cross-page-field { background: rgba(16, 185, 129, 0.10); }
+    .vc-cross-page-btn { width: 18px; height: 18px; margin-left: auto; flex-shrink: 0; cursor: pointer; opacity: 0.7; transition: opacity var(--transition); filter: none; }
+    .vc-cross-page-btn:hover { opacity: 1; }
+    .vc-cross-page-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.7; vertical-align: middle; filter: none; }
 
     /* VC Edit Mode */
     .vc-field-value[contenteditable="true"] { border: 1px dashed var(--accent-amber); padding: 2px 4px; border-radius: 3px; outline: none; min-width: 40px; }
@@ -2634,30 +2635,34 @@
       }
 
       // Row group cards
+      const cpIconUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACR0lEQVR4nH2TO2tUQRiGn29mds9ZN5eNmgRBIRaCYuWtE8KClRixsbUQaysbq0RL4x+w8A8kIEbBRnARW8FC7b1ANIm6uqvZs9lz5rVYsrkQfath3u/y8A5jAF+fJvO1iiU/O+o6UWCI7TJMUAynVmt3+Dg5k91Tg2B18gAgYemF7ObmeXERt71/fBxbW0Pns/SwT7it52OjVm/+AggADlCDsNJKrnde2KnpVH/AwmBCG0hBIiBC5jpzK0/S5cnL2fygyOrkq0scixvu7uTl9S/8R1qg3Kok8wOCgQFZJnkt4L9Vk+mSp9ztAr5fmAvl6r76nKGyyDbpd8ZVoEUgytViYfvN25hhYzHafpPVAI4MEVG/N7CHrr5Hy2e1VjaViqJ/FwIUPbTRJH6YwipF/6V2E/Q1ByXFIdBI8Bo20wiFRsxr2FcxPmw17j1ghzzeiPLkDvLd7j8JeuZ+E6yVdWO7l5MjX5H51KfY1CSKEftnBosnsWmz8bxLeugAfGvGtxOXOm83/bXHDOO3ZSAjSli0/tSr75EjNp3pe9bTj5BYodkt2vEr/HZGHBA4qWKGVp5QWC5nd4jQbWyn0mtKX06nt/YlqpWCVVvrjGwR4D71XlbuCzvXTUKmBbzeUdZrSnpGogbh+2rljDMNFbk9+JNxvICHEmabG5qN0dpGO5v1oTp78OKP1u5clh+VT4SSXYsR75w9nZjJXmkWZ9D/SFYnX1lKbw9VOdru6KcznCJgmEGRlK3W6+lMzP2NiSvrbxoNQr1O/hdJUAVc2KQyZQAAAABJRU5ErkJggg==';
+
       rowItems.forEach((row, ri) => {
         const summaryCells = row.cells.filter(c => (c.textModify || c.text)).slice(0, 3);
         const summary = summaryCells.map(c => c.textModify || c.text).join(' | ');
-        const crossCls = row.crossPage ? ' vc-cross-page' : '';
         const rowActiveCls = vcActiveGroupIdx === ri ? ' vc-active' : '';
-        html += `<div class="vc-group-card${crossCls}${rowActiveCls}" data-group="row" data-ri="${ri}">
+        const cpBtn = row.crossPage ? `<img class="vc-cross-page-btn" src="${cpIconUri}" title="跨頁 — 點擊跳轉" data-cp-ri="${ri}">` : '';
+        html += `<div class="vc-group-card${rowActiveCls}" data-group="row" data-ri="${ri}">
           <div class="vc-group-header${vcActiveGroupIdx === ri ? ' active' : ''}" data-gidx="${ri}">
             <span class="vc-group-chevron">▶</span>
             <span class="vc-group-tag row">#${ri + 1}</span>
             <span class="vc-group-summary">${escHtml(summary)}</span>
+            ${cpBtn}
           </div>
           <div class="vc-group-body">`;
         row.cells.forEach((c, ci) => {
           const locCls = c.hasLoc ? '' : ' vc-field-no-loc';
-          const cellCrossCls = c.crossPage ? ' vc-cross-page-field' : '';
           const isModified = c.text !== c.textModify && c.textModify;
+          const cpFieldIcon = c.crossPage ? `<img class="vc-cross-page-icon" src="${cpIconUri}" title="此欄位跨頁">` : '';
           let valHtml;
           if (isModified) {
             valHtml = `<span class="original">${escHtml(c.text)}</span><span class="modified-val">${escHtml(c.textModify)}</span>`;
           } else {
             valHtml = escHtml(c.textModify || c.text);
           }
-          html += `<div class="vc-field-item${locCls}${cellCrossCls}" data-type="cell" data-ri="${ri}" data-ci="${ci}">
+          html += `<div class="vc-field-item${locCls}" data-type="cell" data-ri="${ri}" data-ci="${ci}">
             <span class="vc-field-label">${escHtml(c.key)}</span>
+            ${cpFieldIcon}
             <span class="vc-field-value">${valHtml}</span>
           </div>`;
         });
@@ -2705,6 +2710,24 @@
               c.items.forEach(it => items.push({ ...it, key: c.key, text: c.textModify || c.text }));
             });
             vcHighlightItems(items);
+          }
+        });
+      });
+
+      // Cross-page button: jump to other page
+      document.querySelectorAll('#vcTableContent .vc-cross-page-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const ri = parseInt(btn.dataset.cpRi);
+          const row = rowItems[ri];
+          if (!row) return;
+          // Find all pages this row spans
+          const pages = new Set();
+          row.cells.forEach(c => c.items.forEach(it => { if (it.regNdx != null) pages.add(it.regNdx); }));
+          // Jump to a page that is NOT the current page
+          const otherPages = [...pages].filter(p => p !== vcPageIndex);
+          if (otherPages.length) {
+            vcSwitchPage(otherPages[0]);
           }
         });
       });
