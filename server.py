@@ -733,7 +733,10 @@ async def vlm_correct_answer(body: VLMCorrectRequest):
             async with httpx.AsyncClient(timeout=VLM_TIMEOUT) as client:
                 resp = await client.post(VLM_URL, json={
                     "model": VLM_MODEL,
-                    "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+                    "messages": [{"role": "user", "content": [
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg=="}},
+                        {"type": "text", "text": prompt},
+                    ]}],
                     "max_tokens": 8000,
                     "temperature": 0.1,
                 })
