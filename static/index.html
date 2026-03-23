@@ -237,6 +237,8 @@
     .vc-split { display: flex; flex: 1; min-height: 0; }
     .vc-image-side { flex: 1; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
     .vc-image-viewport { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; background: var(--bg-primary); }
+    .vc-image-viewport.vc-zoom-mode { overflow: auto; cursor: grab; }
+    .vc-image-viewport.vc-zoom-mode.vc-dragging { cursor: grabbing; }
     .vc-image-container { position: relative; }
     .vc-image-container img { width: 100%; display: block; }
     .vc-table-side { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
@@ -278,10 +280,13 @@
     .vc-field-value.vc-segmented { line-height: 1.8; }
     .vc-field-value.vc-segmented .vc-seg { display: inline-block; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.12); border-radius: 3px; padding: 0 4px; margin: 1px 2px 1px 0; white-space: nowrap; }
     /* VC search */
-    .vc-search-wrap { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-    .vc-search-wrap input { width: 120px; padding: 3px 8px; font-size: 11px; font-family: 'Fira Code', monospace; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; outline: none; }
-    .vc-search-wrap input:focus { border-color: var(--accent-blue); }
-    .vc-search-wrap .vc-search-info { font-size: 10px; color: var(--text-muted); font-family: 'Fira Code', monospace; min-width: 40px; }
+    .vc-search-wrap { display: flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; }
+    .vc-search-wrap .search-wrap { position: relative; }
+    .vc-search-wrap .search-wrap input { width: 180px; padding: 3px 24px 3px 8px; font-size: 12px; font-family: 'Fira Code', monospace; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; outline: none; }
+    .vc-search-wrap .search-wrap input:focus { border-color: var(--accent-blue); }
+    .vc-search-wrap .search-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; display: none; }
+    .vc-search-wrap .search-wrap input:not(:placeholder-shown) ~ .search-clear { display: block; }
+    .vc-search-wrap .vc-group-info { font-size: 11px; color: var(--text-muted); font-family: 'Fira Code', monospace; white-space: nowrap; }
     .vc-search-hit { background: rgba(245, 158, 11, 0.3); border-radius: 2px; }
     .vc-field-item.vc-search-match { background: rgba(245, 158, 11, 0.08); }
 
@@ -2449,6 +2454,8 @@
     let vcActiveGroupIdx = -1;
     let vcShowText = false;
     let vcEditMode = false;
+    let vcZoomMode = false;
+    let vcZoomLevel = 1;
     let vcSearchQuery = '';
     let vcSearchCase = false;
     let vcSearchExact = false;
@@ -2461,6 +2468,9 @@
       vcActiveGroupIdx = -1;
       vcEditMode = false;
       vcSearchQuery = '';
+      vcZoomMode = false;
+      vcZoomLevel = 1;
+      document.getElementById('vcImageViewport')?.classList.remove('vc-zoom-mode');
       document.getElementById('vcSaveBar').style.display = 'none';
       vcRenderPageNav();
       vcLoadImage();
@@ -2486,8 +2496,6 @@
           if (allItems.some(it => it.regNdx === vcPageIndex)) pageGroups++;
         }
       });
-      const groupInfo = totalGroups > 0 ? `<span class="vc-group-count">${pageGroups} / ${totalGroups} groups</span>` : '';
-
       nav.innerHTML = `
         <button class="page-btn" id="vcPrev" ${vcPageIndex <= 0 ? 'disabled' : ''}>Prev</button>
         <span class="page-info">Page ${vcPageIndex + 1} / ${total}</span>
@@ -2496,14 +2504,17 @@
         <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary);cursor:pointer;font-family:'Fira Code',monospace;margin-left:4px;">
           <input type="checkbox" id="vcShowText" ${vcShowText ? 'checked' : ''}> Show Text
         </label>
+        <button class="vc-edit-toggle${vcZoomMode ? ' active' : ''}" id="vcZoomToggle" title="切換縮放檢視">Zoom</button>
         <button class="vc-edit-toggle${vcSegment ? ' active' : ''}" id="vcSegToggle">Seg</button>
         <button class="vc-edit-toggle${vcEditMode ? ' active' : ''}" id="vcEditToggle">Edit</button>
-        ${groupInfo}
         <div class="vc-search-wrap">
-          <input type="text" id="vcSearchInput" placeholder="搜尋欄位..." value="${escHtml(vcSearchQuery)}">
+          <span class="vc-group-info" id="vcGroupInfo"></span>
+          <div class="search-wrap">
+            <input type="text" id="vcSearchInput" placeholder="搜尋欄位..." value="${escHtml(vcSearchQuery)}">
+            <button class="search-clear" id="vcSearchClear">&times;</button>
+          </div>
           <button class="search-toggle ${vcSearchCase ? 'active' : ''}" id="vcSearchCase" title="Match Case">Aa</button>
           <button class="search-toggle ${vcSearchExact ? 'active' : ''}" id="vcSearchExact" title="Match Whole Word" style="font-size:12px;font-weight:700;font-family:'Fira Code',monospace;letter-spacing:-0.5px;">ab<span style="position:absolute;bottom:2px;left:4px;right:4px;height:1.5px;background:currentColor;border-radius:1px;"></span></button>
-          <span class="vc-search-info" id="vcSearchInfo"></span>
         </div>
       `;
       document.getElementById('vcPrev').onclick = () => vcSwitchPage(vcPageIndex - 1);
@@ -2514,6 +2525,14 @@
       document.getElementById('vcShowText').addEventListener('change', (e) => {
         vcShowText = e.target.checked;
         vcRenderHighlight();
+      });
+      document.getElementById('vcZoomToggle').addEventListener('click', () => {
+        vcZoomMode = !vcZoomMode;
+        vcZoomLevel = 1;
+        const vp = document.getElementById('vcImageViewport');
+        vp.classList.toggle('vc-zoom-mode', vcZoomMode);
+        document.getElementById('vcZoomToggle').classList.toggle('active', vcZoomMode);
+        vcApplyZoom();
       });
       document.getElementById('vcSegToggle').addEventListener('click', () => {
         vcSegment = !vcSegment;
@@ -2540,12 +2559,15 @@
           vcSearchTimer = setTimeout(() => {
             vcSearchQuery = e.target.value;
             vcRenderTable();
-            // Refocus and restore cursor
             const el = document.getElementById('vcSearchInput');
             if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length; }
           }, 300);
         });
       }
+      document.getElementById('vcSearchClear')?.addEventListener('click', () => {
+        vcSearchQuery = '';
+        vcRenderTable();
+      });
       document.getElementById('vcSearchCase')?.addEventListener('click', () => {
         vcSearchCase = !vcSearchCase;
         vcRenderTable();
@@ -2610,10 +2632,11 @@
         };
       }
 
-      container.innerHTML = `<img src="${imgUrl}" id="vcPageImg" crossorigin="anonymous">`;
+      container.innerHTML = `<img src="${imgUrl}" id="vcPageImg" crossorigin="anonymous" style="${vcZoomMode ? '' : 'width:100%;'}">`;
       const img = document.getElementById('vcPageImg');
       img.onload = () => {
-        vcRenderHighlight();
+        if (vcZoomMode) vcApplyZoom();
+        else vcRenderHighlight();
       };
     }
 
@@ -2624,25 +2647,31 @@
 
       const img = document.getElementById('vcPageImg');
       if (!img || !img.naturalWidth) return;
-      const displayW = img.clientWidth;
 
       const items = vcActiveHighlight.items.filter(it => it.regNdx === vcPageIndex);
       if (!items.length) return;
 
+      // In zoom mode, use zoom level; in fit-width mode, use clientWidth
+      const vp = document.getElementById('vcImageViewport');
+      let displayW, displayH, offsetX = 0, offsetY = 0;
+      if (vcZoomMode) {
+        displayW = img.naturalWidth * vcZoomLevel;
+        displayH = img.naturalHeight * vcZoomLevel;
+        offsetX = Math.max(0, (vp.clientWidth - displayW) / 2);
+        offsetY = Math.max(0, (vp.clientHeight - displayH) / 2);
+      } else {
+        displayW = img.clientWidth;
+        displayH = img.clientHeight;
+      }
+
       items.forEach(({ x, y, w, h, key, text }) => {
         let sx, sy, sw, sh;
-        if (vcProcessorImgSize) {
-          sx = x * displayW / vcProcessorImgSize.w;
-          sy = y * (img.clientHeight) / vcProcessorImgSize.h;
-          sw = w * displayW / vcProcessorImgSize.w;
-          sh = h * (img.clientHeight) / vcProcessorImgSize.h;
-        } else {
-          // No processor image scaling needed (same image)
-          sx = x * displayW / img.naturalWidth;
-          sy = y * img.clientHeight / img.naturalHeight;
-          sw = w * displayW / img.naturalWidth;
-          sh = h * img.clientHeight / img.naturalHeight;
-        }
+        const refW = vcProcessorImgSize ? vcProcessorImgSize.w : img.naturalWidth;
+        const refH = vcProcessorImgSize ? vcProcessorImgSize.h : img.naturalHeight;
+        sx = x * displayW / refW + offsetX;
+        sy = y * displayH / refH + offsetY;
+        sw = w * displayW / refW;
+        sh = h * displayH / refH;
         const div = document.createElement('div');
         div.className = 'vc-highlight';
         div.style.left = sx + 'px';
@@ -2797,11 +2826,12 @@
         return row.cells.some(c => vcSearchMatch(c.text || '', q) || vcSearchMatch(c.key, q));
       }) : rowItems;
 
-      // Search info
-      if (q) {
-        const total = fieldItems.length + rowItems.length;
-        const matched = filteredFieldItems.length + filteredRowItems.length;
-        html += `<div style="font-size:11px;color:var(--text-muted);padding:4px 8px;font-family:'Fira Code',monospace;">${matched} / ${total} 組</div>`;
+      // Update group info in nav
+      const totalGroupCount = (fieldItems.length ? 1 : 0) + rowItems.length;
+      const shownGroupCount = (filteredFieldItems.length ? 1 : 0) + filteredRowItems.length;
+      const groupInfoEl = document.getElementById('vcGroupInfo');
+      if (groupInfoEl) {
+        groupInfoEl.textContent = q ? `${shownGroupCount}/${totalGroupCount}` : `${totalGroupCount} 組`;
       }
 
       filteredRowItems.forEach((row) => {
@@ -2940,6 +2970,86 @@
       }
       vcRenderHighlight();
     }
+
+    // VC Zoom mode
+    function vcApplyZoom() {
+      const container = document.getElementById('vcImageContainer');
+      const img = document.getElementById('vcPageImg');
+      const vp = document.getElementById('vcImageViewport');
+      if (!img || !img.naturalWidth) return;
+
+      if (!vcZoomMode) {
+        // Fit-width mode: image fills width, scroll vertical
+        container.style.width = '';
+        container.style.height = '';
+        img.style.width = '100%';
+        img.style.transform = '';
+        img.style.transformOrigin = '';
+        vcRenderHighlight();
+        return;
+      }
+
+      // Zoom mode
+      const vw = vp.clientWidth;
+      const vh = vp.clientHeight;
+      const scaledW = img.naturalWidth * vcZoomLevel;
+      const scaledH = img.naturalHeight * vcZoomLevel;
+      container.style.width = Math.max(scaledW, vw) + 'px';
+      container.style.height = Math.max(scaledH, vh) + 'px';
+      const padX = Math.max(0, (vw - scaledW) / 2);
+      const padY = Math.max(0, (vh - scaledH) / 2);
+      img.style.width = '';
+      img.style.transform = `translate(${padX}px, ${padY}px) scale(${vcZoomLevel})`;
+      img.style.transformOrigin = '0 0';
+      vcRenderHighlight();
+    }
+
+    // VC wheel zoom (only in zoom mode)
+    document.getElementById('vcImageViewport')?.addEventListener('wheel', (e) => {
+      if (!vcZoomMode) return;
+      e.preventDefault();
+      const vp = document.getElementById('vcImageViewport');
+      const img = document.getElementById('vcPageImg');
+      if (!img || !img.naturalWidth) return;
+
+      const rect = vp.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left + vp.scrollLeft;
+      const mouseY = e.clientY - rect.top + vp.scrollTop;
+
+      const oldZoom = vcZoomLevel;
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      vcZoomLevel = Math.max(0.1, Math.min(10, vcZoomLevel * factor));
+
+      vcApplyZoom();
+
+      // Adjust scroll to zoom toward mouse position
+      const ratio = vcZoomLevel / oldZoom;
+      vp.scrollLeft = mouseX * ratio - (e.clientX - rect.left);
+      vp.scrollTop = mouseY * ratio - (e.clientY - rect.top);
+    }, { passive: false });
+
+    // VC drag to pan (only in zoom mode)
+    let vcDragging = false, vcDragX = 0, vcDragY = 0, vcScrollX = 0, vcScrollY = 0;
+    document.getElementById('vcImageViewport')?.addEventListener('mousedown', (e) => {
+      if (!vcZoomMode || e.button !== 0) return;
+      vcDragging = true;
+      vcDragX = e.clientX; vcDragY = e.clientY;
+      const vp = document.getElementById('vcImageViewport');
+      vcScrollX = vp.scrollLeft; vcScrollY = vp.scrollTop;
+      vp.classList.add('vc-dragging');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!vcDragging) return;
+      const vp = document.getElementById('vcImageViewport');
+      vp.scrollLeft = vcScrollX - (e.clientX - vcDragX);
+      vp.scrollTop = vcScrollY - (e.clientY - vcDragY);
+    });
+    window.addEventListener('mouseup', () => {
+      if (!vcDragging) return;
+      vcDragging = false;
+      document.getElementById('vcImageViewport')?.classList.remove('vc-dragging');
+    });
 
     // VC Save (edit mode)
     document.getElementById('vcSaveAsAnswer')?.addEventListener('click', async () => {
