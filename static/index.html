@@ -2794,7 +2794,7 @@
 
       // Filter rows by search
       const filteredRowItems = q ? rowItems.filter(row => {
-        return row.cells.some(c => vcSearchMatch(c.textModify || c.text, q) || vcSearchMatch(c.key, q));
+        return row.cells.some(c => vcSearchMatch(c.text || '', q) || vcSearchMatch(c.key, q));
       }) : rowItems;
 
       // Search info
@@ -2806,8 +2806,8 @@
 
       filteredRowItems.forEach((row) => {
         const ri = rowItems.indexOf(row);
-        const summaryCells = row.cells.filter(c => (c.textModify || c.text)).slice(0, 3);
-        const summary = summaryCells.map(c => c.textModify || c.text).join(' | ');
+        const summaryCells = row.cells.filter(c => c.text).slice(0, 3);
+        const summary = summaryCells.map(c => c.text).join(' | ');
         const rowActiveCls = vcActiveGroupIdx === ri ? ' vc-active' : '';
         const cpBtn = row.crossPage ? `<img class="vc-cross-page-btn" src="${cpIconUri}" title="跨頁 — 點擊跳轉" data-cp-ri="${ri}">` : '';
         html += `<div class="vc-group-card${rowActiveCls}" data-group="row" data-ri="${ri}">
@@ -2820,18 +2820,11 @@
           <div class="vc-group-body">`;
         row.cells.forEach((c, ci) => {
           const locCls = c.hasLoc ? '' : ' vc-field-no-loc';
-          const isModified = c.text !== c.textModify && c.textModify;
           const cpLabelCls = c.crossPage ? ' vc-cp' : '';
-          const rawVal = c.textModify || c.text;
+          const rawVal = c.text || '';
           let valHtml, segCls = '';
-          if (isModified) {
-            const modHtml = q ? vcHighlightText(c.textModify, q) : vcSegmentText(c.textModify);
-            valHtml = `<span class="original">${escHtml(c.text)}</span><span class="modified-val">${modHtml}</span>`;
-            if (vcSegment && c.textModify.length > 40) segCls = ' vc-segmented';
-          } else {
-            valHtml = q ? vcHighlightText(rawVal, q) : vcSegmentText(rawVal);
-            if (vcSegment && rawVal.length > 40) segCls = ' vc-segmented';
-          }
+          valHtml = q ? vcHighlightText(rawVal, q) : vcSegmentText(rawVal);
+          if (vcSegment && rawVal.length > 40) segCls = ' vc-segmented';
           html += `<div class="vc-field-item${locCls}" data-type="cell" data-ri="${ri}" data-ci="${ci}">
             <span class="vc-field-label${cpLabelCls}" ${c.crossPage ? 'title="此欄位跨頁"' : ''}>${escHtml(c.key)}</span>
             <span class="vc-field-value${segCls}">${valHtml}</span>
@@ -2878,7 +2871,7 @@
             if (!row) return;
             const items = [];
             row.cells.forEach(c => {
-              c.items.forEach(it => items.push({ ...it, key: c.key, text: c.textModify || c.text }));
+              c.items.forEach(it => items.push({ ...it, key: c.key, text: c.text }));
             });
             vcHighlightItems(items);
           }
@@ -2921,7 +2914,7 @@
             const ci = parseInt(item.dataset.ci);
             const c = rowItems[ri]?.cells[ci];
             if (!c || !c.hasLoc) return;
-            const items = c.items.map(it => ({ ...it, key: c.key, text: c.textModify || c.text }));
+            const items = c.items.map(it => ({ ...it, key: c.key, text: c.text }));
             vcHighlightItems(items);
           }
         });
