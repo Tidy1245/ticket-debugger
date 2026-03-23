@@ -724,6 +724,8 @@
       color: var(--text-primary);
       word-break: break-word;
     }
+    td[contenteditable="true"], .area-value[contenteditable="true"] { border: 1px dashed var(--accent-amber); outline: none; min-width: 30px; padding: 2px 4px; border-radius: 3px; }
+    td[contenteditable="true"]:focus, .area-value[contenteditable="true"]:focus { border-color: var(--accent-blue); background: rgba(59, 130, 246, 0.08); }
 
     /* Column toggle */
     .col-toggles {
@@ -1379,6 +1381,7 @@
       ocrSearchResults = [];
       ocrSearchCurrent = -1;
       tableSearchQuery = '';
+      tableEditMode = false;
       cellHighlightData = null;
       vlmResult = null; vlmActiveGroup = -1; vlmHighlightAreas = [];
       vlmAnswers = null; vlmAnswersList = []; checkCompareResult = null;
@@ -1931,6 +1934,7 @@
     let tableSearchQuery = '';
     let tableSearchCaseSensitive = false;
     let tableSearchExact = false;
+    let tableEditMode = false;
 
     function tableSearchMatch(value, query) {
       if (!query) return true;
@@ -1969,8 +1973,9 @@
 
       let html = '';
 
-      // Search bar fixed at top-right
+      // Search bar + Edit toggle
       html += `<div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
+        <button class="vc-edit-toggle${tableEditMode ? ' active' : ''}" id="tableEditToggle" style="margin-right:8px;">Edit</button>
         <div style="flex:1;"></div>
         <div class="search-bar" style="flex-shrink:0;">
           <div class="search-wrap">
@@ -1997,9 +2002,11 @@
             const value = a.text || a.textOCR || '';
             const label = a.name || a.key;
             const hasLoc = a.regNdx != null && !(a.x === 0 && a.y === 0 && a.w === 1 && a.h === 1) && (a.w > 0 && a.h > 0);
-            const locCls = hasLoc ? ' locatable' : '';
-            const locAttr = hasLoc ? ` data-rx="${a.x}" data-ry="${a.y}" data-rw="${a.w}" data-rh="${a.h}" data-rp="${a.regNdx}" data-rk="${escHtml(label)}" data-rt="${escHtml(value)}"` : '';
-            html += `<div class="area-item${locCls}"${locAttr}><span class="area-label">${q ? tableHighlightText(label, q) : escHtml(label)}</span><span class="area-value">${q ? tableHighlightText(value, q) : escHtml(value)}</span></div>`;
+            const locCls = (hasLoc && !tableEditMode) ? ' locatable' : '';
+            const locAttr = (hasLoc && !tableEditMode) ? ` data-rx="${a.x}" data-ry="${a.y}" data-rw="${a.w}" data-rh="${a.h}" data-rp="${a.regNdx}" data-rk="${escHtml(label)}" data-rt="${escHtml(value)}"` : '';
+            const areaEditAttr = tableEditMode ? ' contenteditable="true"' : '';
+            const valContent = tableEditMode ? escHtml(value) : (q ? tableHighlightText(value, q) : escHtml(value));
+            html += `<div class="area-item${locCls}"${locAttr}><span class="area-label">${q ? tableHighlightText(label, q) : escHtml(label)}</span><span class="area-value"${areaEditAttr}>${valContent}</span></div>`;
           });
           html += '</div>';
         }
@@ -2060,30 +2067,32 @@
               const isError = cell.isFormatError;
 
               let cellClass = isError ? 'error-cell' : isModified ? 'modified' : '';
-              // Check if cell has valid location
               const hasAreaList = cell.areaList && cell.areaList.length > 0;
               const hasSingleLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
               const hasLoc = hasAreaList || hasSingleLoc;
-              if (hasLoc) cellClass += ' locatable';
+              if (hasLoc && !tableEditMode) cellClass += ' locatable';
+
               let content;
-              if (isModified) {
+              if (tableEditMode) {
+                content = escHtml(text);
+              } else if (isModified) {
                 content = `<div class="cell-diff"><span class="original">${q ? tableHighlightText(text, q) : escHtml(text)}</span><span class="modified-val">${q ? tableHighlightText(textModify, q) : escHtml(textModify)}</span></div>`;
               } else {
                 content = q ? tableHighlightText(textModify || text, q) : escHtml(textModify || text);
               }
 
               let locAttr = '';
-              if (hasLoc) {
+              if (hasLoc && !tableEditMode) {
                 locAttr = ` data-rk="${escHtml(h.name || h.text || h.key)}" data-rt="${escHtml(textModify || text)}"`;
                 if (hasAreaList) {
-                  // Store areaList as JSON for multi-area/cross-page positioning
                   locAttr += ` data-areas='${JSON.stringify(cell.areaList)}'`;
                   locAttr += ` data-rp="${cell.areaList[0].regNdx}"`;
                 } else {
                   locAttr += ` data-rx="${cell.x}" data-ry="${cell.y}" data-rw="${cell.w}" data-rh="${cell.h}" data-rp="${cell.regNdx}"`;
                 }
               }
-              html += `<td class="${cellClass}"${locAttr}>${content}</td>`;
+              const editAttr = tableEditMode ? ` contenteditable="true" data-key="${escHtml(h.key)}" data-row="${ri}"` : '';
+              html += `<td class="${cellClass}"${locAttr}${editAttr}>${content}</td>`;
             });
             html += '</tr>';
           });
@@ -2092,7 +2101,66 @@
         }
       }
 
+      // Save bar (edit mode)
+      if (tableEditMode) {
+        html += '<div class="vc-save-bar" style="margin-top:8px;"><button class="vlm-detail-btn btn-green" id="tableSaveAnswer">儲存</button><button class="vlm-detail-btn btn-amber" id="tableRevertEdit">復原</button></div>';
+      }
+
       document.getElementById('tableContent').innerHTML = html;
+
+      // Edit toggle
+      document.getElementById('tableEditToggle')?.addEventListener('click', () => {
+        tableEditMode = !tableEditMode;
+        renderTable();
+      });
+
+      // Save answer (edit mode)
+      document.getElementById('tableSaveAnswer')?.addEventListener('click', async () => {
+        const existingNames = [...(vlmAnswersList || []).map(a => a.name), ...dataAnswersList.map(a => a.name)];
+        const defaultName = deduplicateName(`${currentTicket || 'answer'}_table`, existingNames);
+        const name = prompt('輸入答案名稱:', defaultName);
+        if (!name) return;
+        const finalName = deduplicateName(name, existingNames);
+
+        // Collect fields from area-item
+        const fields = [];
+        document.querySelectorAll('#tableContent .area-item').forEach(el => {
+          const key = el.querySelector('.area-label')?.textContent || '';
+          const value = el.querySelector('.area-value')?.textContent || '';
+          fields.push({ key, value });
+        });
+
+        // Collect rows from table cells
+        const rows = [];
+        document.querySelectorAll('#tableContent table tbody tr').forEach(tr => {
+          const row = {};
+          tr.querySelectorAll('td[data-key]').forEach(td => {
+            row[td.dataset.key] = td.textContent;
+          });
+          if (Object.keys(row).length) rows.push(row);
+        });
+
+        const headers = ticketData.tables?.[0]?.headers || [];
+        const columns = headers.map(h => h.name || h.text || h.key).join(', ');
+
+        try {
+          const res = await fetch(`/api/data-answers/${encodeURIComponent(finalName)}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketId: currentTicket, fields, rows, columns, source: 'table-edit' }),
+          });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+          await loadDataAnswersList();
+          tableEditMode = false;
+          renderTable();
+          alert(`答案「${finalName}」已儲存`);
+        } catch (e) { alert('儲存失敗: ' + e.message); }
+      });
+
+      // Revert edit
+      document.getElementById('tableRevertEdit')?.addEventListener('click', () => {
+        tableEditMode = false;
+        renderTable();
+      });
 
       // Attach search bar listeners (dynamically rendered)
       const searchInput = document.getElementById('tableSearchInput');
