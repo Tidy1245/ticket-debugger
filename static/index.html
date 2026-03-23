@@ -1939,6 +1939,24 @@
       return tableSearchExact ? v === q : v.includes(q);
     }
 
+    function tableHighlightText(text, query) {
+      if (!query || !text) return escHtml(text);
+      const q = tableSearchCaseSensitive ? query : query.toLowerCase();
+      const searchText = tableSearchCaseSensitive ? text : text.toLowerCase();
+      if (tableSearchExact) {
+        return searchText === q ? `<span class="vc-search-hit">${escHtml(text)}</span>` : escHtml(text);
+      }
+      let html = '', lastIdx = 0, idx = searchText.indexOf(q);
+      while (idx !== -1) {
+        if (idx > lastIdx) html += escHtml(text.slice(lastIdx, idx));
+        html += `<span class="vc-search-hit">${escHtml(text.slice(idx, idx + q.length))}</span>`;
+        lastIdx = idx + q.length;
+        idx = searchText.indexOf(q, lastIdx);
+      }
+      if (lastIdx < text.length) html += escHtml(text.slice(lastIdx));
+      return html;
+    }
+
     function renderTable() {
       const areas = ticketData.areas || [];
       const tables = ticketData.tables || [];
@@ -1981,7 +1999,7 @@
             const hasLoc = a.regNdx != null && !(a.x === 0 && a.y === 0 && a.w === 1 && a.h === 1) && (a.w > 0 && a.h > 0);
             const locCls = hasLoc ? ' locatable' : '';
             const locAttr = hasLoc ? ` data-rx="${a.x}" data-ry="${a.y}" data-rw="${a.w}" data-rh="${a.h}" data-rp="${a.regNdx}" data-rk="${escHtml(label)}" data-rt="${escHtml(value)}"` : '';
-            html += `<div class="area-item${locCls}"${locAttr}><span class="area-label">${escHtml(label)}</span><span class="area-value">${escHtml(value)}</span></div>`;
+            html += `<div class="area-item${locCls}"${locAttr}><span class="area-label">${q ? tableHighlightText(label, q) : escHtml(label)}</span><span class="area-value">${q ? tableHighlightText(value, q) : escHtml(value)}</span></div>`;
           });
           html += '</div>';
         }
@@ -2049,9 +2067,9 @@
               if (hasLoc) cellClass += ' locatable';
               let content;
               if (isModified) {
-                content = `<div class="cell-diff"><span class="original">${escHtml(text)}</span><span class="modified-val">${escHtml(textModify)}</span></div>`;
+                content = `<div class="cell-diff"><span class="original">${q ? tableHighlightText(text, q) : escHtml(text)}</span><span class="modified-val">${q ? tableHighlightText(textModify, q) : escHtml(textModify)}</span></div>`;
               } else {
-                content = escHtml(textModify || text);
+                content = q ? tableHighlightText(textModify || text, q) : escHtml(textModify || text);
               }
 
               let locAttr = '';
@@ -2432,6 +2450,8 @@
     let vcShowText = false;
     let vcEditMode = false;
     let vcSearchQuery = '';
+    let vcSearchCase = false;
+    let vcSearchExact = false;
     let vcSegment = false;
 
     function renderVisualCheck() {
@@ -2481,6 +2501,8 @@
         ${groupInfo}
         <div class="vc-search-wrap">
           <input type="text" id="vcSearchInput" placeholder="搜尋欄位..." value="${escHtml(vcSearchQuery)}">
+          <button class="search-toggle ${vcSearchCase ? 'active' : ''}" id="vcSearchCase" title="Match Case">Aa</button>
+          <button class="search-toggle ${vcSearchExact ? 'active' : ''}" id="vcSearchExact" title="Match Whole Word" style="font-size:12px;font-weight:700;font-family:'Fira Code',monospace;letter-spacing:-0.5px;">ab<span style="position:absolute;bottom:2px;left:4px;right:4px;height:1.5px;background:currentColor;border-radius:1px;"></span></button>
           <span class="vc-search-info" id="vcSearchInfo"></span>
         </div>
       `;
@@ -2512,75 +2534,44 @@
       // VC Search
       const vcSearchInput = document.getElementById('vcSearchInput');
       if (vcSearchInput) {
+        let vcSearchTimer;
         vcSearchInput.addEventListener('input', (e) => {
-          vcSearchQuery = e.target.value;
-          vcApplySearch();
+          clearTimeout(vcSearchTimer);
+          vcSearchTimer = setTimeout(() => {
+            vcSearchQuery = e.target.value;
+            vcRenderTable();
+            // Refocus and restore cursor
+            const el = document.getElementById('vcSearchInput');
+            if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length; }
+          }, 300);
         });
-        // Apply existing search on render
-        if (vcSearchQuery) requestAnimationFrame(() => vcApplySearch());
       }
+      document.getElementById('vcSearchCase')?.addEventListener('click', () => {
+        vcSearchCase = !vcSearchCase;
+        vcRenderTable();
+      });
+      document.getElementById('vcSearchExact')?.addEventListener('click', () => {
+        vcSearchExact = !vcSearchExact;
+        vcRenderTable();
+      });
     }
 
-    function vcApplySearch() {
-      const q = vcSearchQuery.trim().toLowerCase();
-      const info = document.getElementById('vcSearchInfo');
-      // Clear previous highlights
-      document.querySelectorAll('#vcTableContent .vc-field-item.vc-search-match').forEach(el => el.classList.remove('vc-search-match'));
-      document.querySelectorAll('#vcTableContent .vc-search-hit').forEach(el => {
-        el.replaceWith(document.createTextNode(el.textContent));
-      });
-
-      if (!q) {
-        if (info) info.textContent = '';
-        return;
+    function vcHighlightText(text, query) {
+      if (!query) return escHtml(text);
+      const q = vcSearchCase ? query : query.toLowerCase();
+      const searchText = vcSearchCase ? text : text.toLowerCase();
+      if (vcSearchExact) {
+        return searchText === q ? `<span class="vc-search-hit">${escHtml(text)}</span>` : escHtml(text);
       }
-
-      let matchCount = 0;
-      let firstMatch = null;
-      document.querySelectorAll('#vcTableContent .vc-field-value').forEach(valEl => {
-        // Skip if in edit mode (contenteditable)
-        if (valEl.getAttribute('contenteditable') === 'true') return;
-        const text = valEl.textContent;
-        if (!text.toLowerCase().includes(q)) return;
-
-        const item = valEl.closest('.vc-field-item');
-        if (item) {
-          item.classList.add('vc-search-match');
-          // Expand parent group if collapsed
-          const card = item.closest('.vc-group-card');
-          if (card) {
-            const header = card.querySelector('.vc-group-header');
-            if (header && !header.classList.contains('active')) {
-              header.classList.add('active');
-              card.classList.add('vc-active');
-            }
-          }
-        }
-
-        // Highlight matching text
-        const frag = document.createDocumentFragment();
-        let lastIdx = 0;
-        const lowerText = text.toLowerCase();
-        let idx = lowerText.indexOf(q);
-        while (idx !== -1) {
-          if (idx > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, idx)));
-          const mark = document.createElement('span');
-          mark.className = 'vc-search-hit';
-          mark.textContent = text.slice(idx, idx + q.length);
-          frag.appendChild(mark);
-          lastIdx = idx + q.length;
-          matchCount++;
-          idx = lowerText.indexOf(q, lastIdx);
-        }
-        if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
-        valEl.textContent = '';
-        valEl.appendChild(frag);
-
-        if (!firstMatch) firstMatch = item || valEl;
-      });
-
-      if (info) info.textContent = matchCount ? `${matchCount} 筆` : '無結果';
-      if (firstMatch) firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      let html = '', lastIdx = 0, idx = searchText.indexOf(q);
+      while (idx !== -1) {
+        if (idx > lastIdx) html += escHtml(text.slice(lastIdx, idx));
+        html += `<span class="vc-search-hit">${escHtml(text.slice(idx, idx + q.length))}</span>`;
+        lastIdx = idx + q.length;
+        idx = searchText.indexOf(q, lastIdx);
+      }
+      if (lastIdx < text.length) html += escHtml(text.slice(lastIdx));
+      return html;
     }
 
     function vcSwitchPage(index) {
@@ -2745,6 +2736,13 @@
       return { fieldItems, rowItems };
     }
 
+    function vcSearchMatch(value, query) {
+      if (!query) return true;
+      const v = vcSearchCase ? value : value.toLowerCase();
+      const q = vcSearchCase ? query : query.toLowerCase();
+      return vcSearchExact ? v === q : v.includes(q);
+    }
+
     function vcSegmentText(text) {
       if (!vcSegment || !text || text.length <= 40) return escHtml(text);
       // Split by comma/slash but keep delimiters attached to segments
@@ -2761,10 +2759,14 @@
 
     function vcRenderGroupView(el, areas, tables) {
       const { fieldItems, rowItems } = vcBuildFieldItems(areas, tables);
+      const q = vcSearchQuery.trim();
       let html = '';
 
+      // Filter fields by search
+      const filteredFieldItems = q ? fieldItems.filter(f => vcSearchMatch(f.text, q) || vcSearchMatch(f.key, q)) : fieldItems;
+
       // Fields group card
-      if (fieldItems.length) {
+      if (filteredFieldItems.length) {
         const summary = fieldItems.slice(0, 3).map(f => f.text || '—').join(' | ');
         const fieldsActiveCls = vcActiveGroupIdx === -2 ? ' vc-active' : '';
         html += `<div class="vc-group-card${fieldsActiveCls}" data-group="fields">
@@ -2774,12 +2776,14 @@
             <span class="vc-group-summary">${escHtml(summary)}</span>
           </div>
           <div class="vc-group-body">`;
-        fieldItems.forEach((f, fi) => {
+        filteredFieldItems.forEach((f) => {
+          const fi = fieldItems.indexOf(f);
           const locCls = f.hasLoc ? '' : ' vc-field-no-loc';
           const fSegCls = (vcSegment && f.text.length > 40) ? ' vc-segmented' : '';
+          const valHtml = q ? vcHighlightText(f.text, q) : vcSegmentText(f.text);
           html += `<div class="vc-field-item${locCls}" data-type="field" data-fi="${fi}">
-            <span class="vc-field-label">${escHtml(f.key)}</span>
-            <span class="vc-field-value${fSegCls}">${vcSegmentText(f.text)}</span>
+            <span class="vc-field-label">${q ? vcHighlightText(f.key, q) : escHtml(f.key)}</span>
+            <span class="vc-field-value${fSegCls}">${valHtml}</span>
           </div>`;
         });
         html += '</div></div>';
@@ -2788,7 +2792,20 @@
       // Row group cards
       const cpIconUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACR0lEQVR4nH2TO2tUQRiGn29mds9ZN5eNmgRBIRaCYuWtE8KClRixsbUQaysbq0RL4x+w8A8kIEbBRnARW8FC7b1ANIm6uqvZs9lz5rVYsrkQfath3u/y8A5jAF+fJvO1iiU/O+o6UWCI7TJMUAynVmt3+Dg5k91Tg2B18gAgYemF7ObmeXERt71/fBxbW0Pns/SwT7it52OjVm/+AggADlCDsNJKrnde2KnpVH/AwmBCG0hBIiBC5jpzK0/S5cnL2fygyOrkq0scixvu7uTl9S/8R1qg3Kok8wOCgQFZJnkt4L9Vk+mSp9ztAr5fmAvl6r76nKGyyDbpd8ZVoEUgytViYfvN25hhYzHafpPVAI4MEVG/N7CHrr5Hy2e1VjaViqJ/FwIUPbTRJH6YwipF/6V2E/Q1ByXFIdBI8Bo20wiFRsxr2FcxPmw17j1ghzzeiPLkDvLd7j8JeuZ+E6yVdWO7l5MjX5H51KfY1CSKEftnBosnsWmz8bxLeugAfGvGtxOXOm83/bXHDOO3ZSAjSli0/tSr75EjNp3pe9bTj5BYodkt2vEr/HZGHBA4qWKGVp5QWC5nd4jQbWyn0mtKX06nt/YlqpWCVVvrjGwR4D71XlbuCzvXTUKmBbzeUdZrSnpGogbh+2rljDMNFbk9+JNxvICHEmabG5qN0dpGO5v1oTp78OKP1u5clh+VT4SSXYsR75w9nZjJXmkWZ9D/SFYnX1lKbw9VOdru6KcznCJgmEGRlK3W6+lMzP2NiSvrbxoNQr1O/hdJUAVc2KQyZQAAAABJRU5ErkJggg==';
 
-      rowItems.forEach((row, ri) => {
+      // Filter rows by search
+      const filteredRowItems = q ? rowItems.filter(row => {
+        return row.cells.some(c => vcSearchMatch(c.textModify || c.text, q) || vcSearchMatch(c.key, q));
+      }) : rowItems;
+
+      // Search info
+      if (q) {
+        const total = fieldItems.length + rowItems.length;
+        const matched = filteredFieldItems.length + filteredRowItems.length;
+        html += `<div style="font-size:11px;color:var(--text-muted);padding:4px 8px;font-family:'Fira Code',monospace;">${matched} / ${total} 組</div>`;
+      }
+
+      filteredRowItems.forEach((row) => {
+        const ri = rowItems.indexOf(row);
         const summaryCells = row.cells.filter(c => (c.textModify || c.text)).slice(0, 3);
         const summary = summaryCells.map(c => c.textModify || c.text).join(' | ');
         const rowActiveCls = vcActiveGroupIdx === ri ? ' vc-active' : '';
@@ -2808,10 +2825,11 @@
           const rawVal = c.textModify || c.text;
           let valHtml, segCls = '';
           if (isModified) {
-            valHtml = `<span class="original">${escHtml(c.text)}</span><span class="modified-val">${vcSegmentText(c.textModify)}</span>`;
+            const modHtml = q ? vcHighlightText(c.textModify, q) : vcSegmentText(c.textModify);
+            valHtml = `<span class="original">${escHtml(c.text)}</span><span class="modified-val">${modHtml}</span>`;
             if (vcSegment && c.textModify.length > 40) segCls = ' vc-segmented';
           } else {
-            valHtml = vcSegmentText(rawVal);
+            valHtml = q ? vcHighlightText(rawVal, q) : vcSegmentText(rawVal);
             if (vcSegment && rawVal.length > 40) segCls = ' vc-segmented';
           }
           html += `<div class="vc-field-item${locCls}" data-type="cell" data-ri="${ri}" data-ci="${ci}">
@@ -3934,76 +3952,11 @@
       }
       html += '</div>';
 
-      // === Section C: Comparison Results ===
-      html += '<div class="check-config" style="margin-top:16px;">';
-      if (checkCompareResult) {
-        // Has results: title with re-compare button at top-right
-        html += '<div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Step 2: 比對結果';
-        html += `<button class="vlm-detail-btn" id="checkCompareBtn" style="margin-left:auto;height:26px;font-size:11px;">重新比對</button>`;
-        html += '</div>';
-
-        const cr = checkCompareResult;
-        html += '<div class="check-summary">';
-        html += `<span class="check-stat check-stat-correct">${cr.matchCount} 正確</span>`;
-        if (cr.wrongCount > 0) html += `<span class="check-stat check-stat-wrong">${cr.wrongCount} 差異</span>`;
-        if (cr.missingCount > 0) html += `<span class="check-stat check-stat-missing">${cr.missingCount} 缺失</span>`;
-        html += '</div>';
-
-        html += '<div style="overflow:auto;max-height:600px;">';
-        html += '<table class="check-result-table"><thead><tr><th>#</th>';
-        cr.colKeys.forEach(col => { html += `<th>${escHtml(col)}</th>`; });
-        html += '</tr></thead><tbody>';
-
-        cr.results.forEach(rowResult => {
-          const ri = rowResult.row;
-          const hasDiff = rowResult.cells.some(c => c.status !== 'match');
-          if (!hasDiff) {
-            // All match: single row, only show pipeline values
-            html += `<tr><td style="color:var(--text-muted);">${ri}</td>`;
-            rowResult.cells.forEach(c => {
-              html += `<td class="check-row-pipeline">${escHtml(c.pVal)}</td>`;
-            });
-            html += '</tr>';
-          } else {
-            // Has diff: double row, but only show diff columns' VLM answer
-            html += `<tr><td style="color:var(--text-muted);" rowspan="2">${ri}</td>`;
-            rowResult.cells.forEach(c => {
-              if (c.status === 'match') {
-                html += `<td class="check-row-pipeline" rowspan="2">${escHtml(c.pVal)}</td>`;
-              } else if (c.status === 'missing') {
-                html += `<td class="check-row-pipeline" style="color:var(--text-muted);font-style:italic;">（空）</td>`;
-              } else {
-                const diffHtml = renderDiffHtml(c.normA, c.aMatch, 'check-diff-highlight');
-                html += `<td class="check-row-pipeline">${diffHtml}</td>`;
-              }
-            });
-            html += '</tr><tr>';
-            rowResult.cells.forEach(c => {
-              if (c.status === 'match') return; // already rowspan=2
-              if (c.status === 'missing') {
-                html += `<td class="check-missing-cell" style="color:var(--text-muted);">${escHtml(c.vlmVal || c.vVal)}</td>`;
-              } else {
-                const diffHtml = renderDiffHtml(c.normB, c.bMatch, 'check-diff-vlm');
-                html += `<td class="check-row-vlm">${diffHtml}</td>`;
-              }
-            });
-            html += '</tr>';
-          }
-        });
-
-        html += '</tbody></table></div>';
-      } else {
-        // No results: centered button
-        html += '<div class="check-config-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Step 2: 比對結果</div>';
-        html += `<div style="text-align:center;padding:24px 0;"><button class="vlm-btn" id="checkCompareBtn" style="background:linear-gradient(135deg, #10b981, #059669);box-shadow:0 0 12px rgba(16,185,129,0.3);" ${vlmAnswers ? '' : 'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>執行比對</button></div>`;
-      }
-      html += '</div>';
 
       el.innerHTML = html;
 
       // === Attach event listeners ===
       document.getElementById('checkRunBtn')?.addEventListener('click', startCheckAnswer);
-      document.getElementById('checkCompareBtn')?.addEventListener('click', () => { runComparison(); renderCheckPanel(); });
 
       // Preset select: load preset on change
       document.getElementById('checkPresetSelect')?.addEventListener('change', (e) => {
