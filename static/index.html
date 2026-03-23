@@ -1480,7 +1480,7 @@
     });
 
     function resetDmBtn() {
-      resetDmBtn();
+      document.getElementById('dataMgmtBtn').classList.remove('active');
       const icon = document.getElementById('dataMgmtIcon');
       if (icon && icon._defaultSrc) icon.src = icon._defaultSrc;
     }
