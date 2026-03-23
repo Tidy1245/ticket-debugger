@@ -2432,6 +2432,7 @@
     let vcShowText = false;
     let vcEditMode = false;
     let vcSearchQuery = '';
+    let vcSegment = false;
 
     function renderVisualCheck() {
       vcPageIndex = 0;
@@ -2475,6 +2476,7 @@
         <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary);cursor:pointer;font-family:'Fira Code',monospace;margin-left:4px;">
           <input type="checkbox" id="vcShowText" ${vcShowText ? 'checked' : ''}> Show Text
         </label>
+        <button class="vc-edit-toggle${vcSegment ? ' active' : ''}" id="vcSegToggle">Seg</button>
         <button class="vc-edit-toggle${vcEditMode ? ' active' : ''}" id="vcEditToggle">Edit</button>
         ${groupInfo}
         <div class="vc-search-wrap">
@@ -2490,6 +2492,11 @@
       document.getElementById('vcShowText').addEventListener('change', (e) => {
         vcShowText = e.target.checked;
         vcRenderHighlight();
+      });
+      document.getElementById('vcSegToggle').addEventListener('click', () => {
+        vcSegment = !vcSegment;
+        document.getElementById('vcSegToggle').classList.toggle('active', vcSegment);
+        vcRenderTable();
       });
       document.getElementById('vcEditToggle').addEventListener('click', () => {
         vcEditMode = !vcEditMode;
@@ -2739,8 +2746,17 @@
     }
 
     function vcSegmentText(text) {
-      if (!text || text.length <= 40 || !text.includes(',')) return escHtml(text);
-      return text.split(/,\s*/).map(s => `<span class="vc-seg">${escHtml(s.trim())}</span>`).join(' ');
+      if (!vcSegment || !text || text.length <= 40) return escHtml(text);
+      // Split by comma/slash but keep delimiters attached to segments
+      const parts = text.split(/(,\s*|\/\s*)/);
+      if (parts.length <= 1) return escHtml(text);
+      let html = '';
+      for (let i = 0; i < parts.length; i += 2) {
+        const seg = parts[i] || '';
+        const delim = parts[i + 1] || '';
+        if (seg.trim() || delim) html += `<span class="vc-seg">${escHtml(seg + delim)}</span>`;
+      }
+      return html;
     }
 
     function vcRenderGroupView(el, areas, tables) {
@@ -2760,7 +2776,7 @@
           <div class="vc-group-body">`;
         fieldItems.forEach((f, fi) => {
           const locCls = f.hasLoc ? '' : ' vc-field-no-loc';
-          const fSegCls = (f.text.length > 40 && f.text.includes(',')) ? ' vc-segmented' : '';
+          const fSegCls = (vcSegment && f.text.length > 40) ? ' vc-segmented' : '';
           html += `<div class="vc-field-item${locCls}" data-type="field" data-fi="${fi}">
             <span class="vc-field-label">${escHtml(f.key)}</span>
             <span class="vc-field-value${fSegCls}">${vcSegmentText(f.text)}</span>
@@ -2793,10 +2809,10 @@
           let valHtml, segCls = '';
           if (isModified) {
             valHtml = `<span class="original">${escHtml(c.text)}</span><span class="modified-val">${vcSegmentText(c.textModify)}</span>`;
-            if (c.textModify.length > 40 && c.textModify.includes(',')) segCls = ' vc-segmented';
+            if (vcSegment && c.textModify.length > 40) segCls = ' vc-segmented';
           } else {
             valHtml = vcSegmentText(rawVal);
-            if (rawVal.length > 40 && rawVal.includes(',')) segCls = ' vc-segmented';
+            if (vcSegment && rawVal.length > 40) segCls = ' vc-segmented';
           }
           html += `<div class="vc-field-item${locCls}" data-type="cell" data-ri="${ri}" data-ci="${ci}">
             <span class="vc-field-label${cpLabelCls}" ${c.crossPage ? 'title="此欄位跨頁"' : ''}>${escHtml(c.key)}</span>
