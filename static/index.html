@@ -280,9 +280,8 @@
     .vc-field-value.vc-segmented { line-height: 1.8; }
     .vc-field-value.vc-segmented .vc-seg { display: inline-block; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.12); border-radius: 3px; padding: 0 4px; margin: 1px 2px 1px 0; white-space: nowrap; }
     /* VC search */
-    .vc-search-wrap { display: flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; }
-    .vc-search-wrap .search-wrap input { width: 180px; }
-    .vc-search-wrap .vc-group-info { font-size: 11px; color: var(--text-muted); font-family: 'Fira Code', monospace; white-space: nowrap; }
+    .vc-search-bar { margin-left: auto; }
+    .vc-search-bar .vc-group-info { font-size: 11px; color: var(--text-muted); font-family: 'Fira Code', monospace; white-space: nowrap; }
     .vc-search-hit { background: rgba(245, 158, 11, 0.3); border-radius: 2px; }
     .vc-field-item.vc-search-match { background: rgba(245, 158, 11, 0.08); }
 
@@ -2503,7 +2502,7 @@
         <button class="vc-edit-toggle${vcZoomMode ? ' active' : ''}" id="vcZoomToggle" title="切換縮放檢視">Zoom</button>
         <button class="vc-edit-toggle${vcSegment ? ' active' : ''}" id="vcSegToggle">Seg</button>
         <button class="vc-edit-toggle${vcEditMode ? ' active' : ''}" id="vcEditToggle">Edit</button>
-        <div class="vc-search-wrap">
+        <div class="search-bar vc-search-bar">
           <span class="vc-group-info" id="vcGroupInfo"></span>
           <div class="search-wrap">
             <input type="text" id="vcSearchInput" placeholder="搜尋欄位..." value="${escHtml(vcSearchQuery)}">
@@ -3005,28 +3004,13 @@
       vcRenderHighlight();
     }
 
-    // VC wheel zoom (only in zoom mode)
+    // VC wheel zoom (only in zoom mode, same as Images tab)
     document.getElementById('vcImageViewport')?.addEventListener('wheel', (e) => {
       if (!vcZoomMode) return;
       e.preventDefault();
-      const vp = document.getElementById('vcImageViewport');
-      const img = document.getElementById('vcPageImg');
-      if (!img || !img.naturalWidth) return;
-
-      const rect = vp.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left + vp.scrollLeft;
-      const mouseY = e.clientY - rect.top + vp.scrollTop;
-
-      const oldZoom = vcZoomLevel;
       const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      vcZoomLevel = Math.max(0.1, Math.min(10, vcZoomLevel * factor));
-
+      vcZoomLevel = Math.max(0.05, Math.min(10, vcZoomLevel * factor));
       vcApplyZoom();
-
-      // Adjust scroll to zoom toward mouse position
-      const ratio = vcZoomLevel / oldZoom;
-      vp.scrollLeft = mouseX * ratio - (e.clientX - rect.left);
-      vp.scrollTop = mouseY * ratio - (e.clientY - rect.top);
     }, { passive: false });
 
     // VC drag to pan (only in zoom mode)
