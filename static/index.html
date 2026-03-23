@@ -1973,9 +1973,8 @@
 
       let html = '';
 
-      // Search bar + Edit toggle
+      // Search bar
       html += `<div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
-        <button class="vc-edit-toggle${tableEditMode ? ' active' : ''}" id="tableEditToggle" style="margin-right:8px;">Edit</button>
         <div style="flex:1;"></div>
         <div class="search-bar" style="flex-shrink:0;">
           <div class="search-wrap">
@@ -2039,8 +2038,9 @@
         const rowCountLabel = isEmptyTable ? 'empty row' : `${rows.length}${q ? '/' + allRows.length : ''} rows`;
 
         html += `
-          <div class="section-header" style="flex-shrink:0;">
+          <div class="section-header" style="flex-shrink:0;display:flex;align-items:center;gap:8px;">
             ${t.name || 'Table'} <span class="count">${rowCountLabel}</span>
+            <button class="vc-edit-toggle${tableEditMode ? ' active' : ''}" id="tableEditToggle" style="margin-left:8px;">Edit</button>
           </div>
           <div class="col-toggles">
             ${headers.map(h => `<span class="col-toggle ${visibleColumns.has(h.key) ? 'active' : ''}" data-col="${h.key}">${h.name || h.text || h.key}</span>`).join('')}
@@ -2722,15 +2722,11 @@
       items.forEach(({ x, y, w, h, key, text }) => {
         let sx, sy, sw, sh;
         if (vcZoomMode) {
-          // In zoom mode: image uses transform scale + translate
-          // Read padX/padY from the image transform directly
-          const match = (img.style.transform || '').match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
-          const padX = match ? parseFloat(match[1]) : 0;
-          const padY = match ? parseFloat(match[2]) : 0;
-          sx = x * img.naturalWidth * vcZoomLevel / refW + padX;
-          sy = y * img.naturalHeight * vcZoomLevel / refH + padY;
-          sw = w * img.naturalWidth * vcZoomLevel / refW;
-          sh = h * img.naturalHeight * vcZoomLevel / refH;
+          // 1:1 mode: image at natural size
+          sx = x * img.naturalWidth / refW;
+          sy = y * img.naturalHeight / refH;
+          sw = w * img.naturalWidth / refW;
+          sh = h * img.naturalHeight / refH;
         } else {
           // Fit-width mode: image has width:100%
           const displayW = img.clientWidth;
@@ -3039,7 +3035,7 @@
       vcRenderHighlight();
     }
 
-    // VC Zoom mode
+    // VC Zoom mode (fixed 1:1 size, no wheel zoom)
     function vcApplyZoom() {
       const container = document.getElementById('vcImageContainer');
       const img = document.getElementById('vcPageImg');
@@ -3047,7 +3043,6 @@
       if (!img || !img.naturalWidth) return;
 
       if (!vcZoomMode) {
-        // Fit-width mode: image fills width, scroll vertical
         container.style.width = '';
         container.style.height = '';
         img.style.width = '100%';
@@ -3057,29 +3052,18 @@
         return;
       }
 
-      // Zoom mode — use viewport size before resizing container
+      // 1:1 natural size
+      vcZoomLevel = 1;
       const vw = vp.clientWidth;
       const vh = vp.clientHeight;
-      const scaledW = img.naturalWidth * vcZoomLevel;
-      const scaledH = img.naturalHeight * vcZoomLevel;
-      const padX = Math.max(0, (vw - scaledW) / 2);
-      const padY = Math.max(0, (vh - scaledH) / 2);
-      container.style.width = Math.max(scaledW, vw) + 'px';
-      container.style.height = Math.max(scaledH, vh) + 'px';
+      container.style.width = Math.max(img.naturalWidth, vw) + 'px';
+      container.style.height = Math.max(img.naturalHeight, vh) + 'px';
       img.style.width = '';
-      img.style.transform = `translate(${padX}px, ${padY}px) scale(${vcZoomLevel})`;
-      img.style.transformOrigin = '0 0';
+      img.style.transform = '';
+      img.style.transformOrigin = '';
       vcRenderHighlight();
     }
 
-    // VC wheel zoom (only in zoom mode, same as Images tab)
-    document.getElementById('vcImageViewport')?.addEventListener('wheel', (e) => {
-      if (!vcZoomMode) return;
-      e.preventDefault();
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      vcZoomLevel = Math.max(0.05, Math.min(10, vcZoomLevel * factor));
-      vcApplyZoom();
-    }, { passive: false });
 
     // VC drag to pan (only in zoom mode)
     let vcDragging = false, vcDragX = 0, vcDragY = 0, vcScrollX = 0, vcScrollY = 0;
