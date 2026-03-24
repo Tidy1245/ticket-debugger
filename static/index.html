@@ -324,6 +324,7 @@
     .vc-icon-btn:hover { border-color: var(--accent-blue); }
     .vc-icon-btn.active { border-color: var(--accent-amber); background: rgba(245, 158, 11, 0.08); }
     .vc-icon-btn.disabled { opacity: 0.3; pointer-events: none; }
+    .vc-copy-ocr-mode .vc-area-overlay { cursor: copy; }
     .vc-edit-toggle { padding: 3px 10px; font-size: 11px; font-family: 'Fira Code', monospace; border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 4px; cursor: pointer; transition: all var(--transition); margin-left: 4px; }
     .vc-edit-toggle:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
     .vc-edit-toggle.active { background: rgba(245, 158, 11, 0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
@@ -2718,8 +2719,8 @@
       });
       document.getElementById('vcCopyOcrToggle').addEventListener('click', () => {
         vcCopyOcr = !vcCopyOcr;
+        document.getElementById('vcImageContainer').classList.toggle('vc-copy-ocr-mode', vcCopyOcr);
         vcRenderPageNav();
-        vcRenderAreaOverlays();
       });
 
       // VC Search
@@ -2863,22 +2864,9 @@
           label.textContent = area.text;
           div.appendChild(label);
         }
+        if (area.text) div.dataset.ocrText = area.text;
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
-        // Copy OCR text mode: click area to copy text to clipboard
-        if (vcCopyOcr) {
-          div.style.cursor = 'copy';
-          div.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            const text = area.text || '';
-            if (!text) return;
-            navigator.clipboard.writeText(text).then(() => {
-              div.style.background = 'rgba(245, 158, 11, 0.4)';
-              setTimeout(() => { div.style.background = ''; }, 200);
-            });
-          });
-        }
         container.appendChild(div);
       });
     }
@@ -3238,6 +3226,21 @@
       vcRenderAreaOverlays();
     }
 
+
+    // VC Copy OCR text: delegated click on area overlays
+    document.getElementById('vcImageContainer').addEventListener('click', (e) => {
+      if (!vcCopyOcr) return;
+      const overlay = e.target.closest('.vc-area-overlay');
+      if (!overlay) return;
+      const text = overlay.dataset.ocrText;
+      if (!text) return;
+      e.stopPropagation();
+      e.preventDefault();
+      navigator.clipboard.writeText(text).then(() => {
+        overlay.style.background = 'rgba(245, 158, 11, 0.4)';
+        setTimeout(() => { overlay.style.background = ''; }, 200);
+      });
+    });
 
     // VC drag to pan (only in zoom mode)
     let vcDragging = false, vcDragX = 0, vcDragY = 0, vcScrollX = 0, vcScrollY = 0;
