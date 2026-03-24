@@ -2714,31 +2714,41 @@
         try {
           // Fetch raw config
           const config = await fetchJSON(`/api/tickets/${currentTicket}/config`);
-          // Get current table data from UI
-          const tables = ticketData.tables || [];
           const rawInteg = config.integrator;
           const isListFormat = Array.isArray(rawInteg);
           const integList = isListFormat ? rawInteg : (rawInteg ? [rawInteg] : []);
 
-          // Update integrator table data from current ticketData
+          // Read current DOM values from Table Data tab
+          const domRows = {};  // { rowIdx: { key: text } }
+          document.querySelectorAll('#tableContent table tbody tr').forEach(tr => {
+            tr.querySelectorAll('td[data-key][data-row]').forEach(td => {
+              const ri = parseInt(td.dataset.row);
+              const key = td.dataset.key;
+              if (!domRows[ri]) domRows[ri] = {};
+              domRows[ri][key] = td.textContent;
+            });
+          });
+          const domFields = {};  // { key: text }
+          document.querySelectorAll('#tableContent .area-item').forEach(el => {
+            const key = el.querySelector('.area-label')?.textContent || '';
+            const value = el.querySelector('.area-value')?.textContent || '';
+            if (key) domFields[key] = value;
+          });
+
+          // Write DOM values back to config integrator
           let tableIdx = 0;
           for (const integ of integList) {
             const tl = integ.tableList || [];
             for (const table of tl) {
-              if (tableIdx < tables.length) {
-                const uiTable = tables[tableIdx];
-                const rows = uiTable.rows || [];
-                const data = table.data || [];
-                // Update cell text values from UI rows
-                for (let ri = 0; ri < Math.min(rows.length, data.length); ri++) {
-                  const uiRow = rows[ri];
-                  const dataRow = data[ri];
-                  for (const cell of dataRow) {
-                    const key = cell.key || cell.name || '';
-                    if (key && uiRow[key] !== undefined) {
-                      const uiCell = uiRow[key];
-                      cell.text = typeof uiCell === 'object' ? (uiCell.text || '') : uiCell;
-                    }
+              const data = table.data || [];
+              for (let ri = 0; ri < data.length; ri++) {
+                const dataRow = data[ri];
+                const uiRow = domRows[ri];
+                if (!uiRow) continue;
+                for (const cell of dataRow) {
+                  const key = cell.key || cell.name || '';
+                  if (key && uiRow[key] !== undefined) {
+                    cell.text = uiRow[key];
                   }
                 }
               }
@@ -2746,11 +2756,10 @@
             }
             // Update area fields
             const areas = integ.areaList || [];
-            const uiAreas = ticketData.areas || [];
-            for (const uiArea of uiAreas) {
-              const match = areas.find(a => a.key === uiArea.key || a.name === uiArea.key);
-              if (match && uiArea.text !== undefined) {
-                match.text = uiArea.text;
+            for (const area of areas) {
+              const key = area.key || area.name || '';
+              if (key && domFields[key] !== undefined) {
+                area.text = domFields[key];
               }
             }
           }
