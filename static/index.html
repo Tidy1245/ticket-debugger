@@ -2736,7 +2736,8 @@
                   for (const cell of dataRow) {
                     const key = cell.key || cell.name || '';
                     if (key && uiRow[key] !== undefined) {
-                      cell.text = uiRow[key];
+                      const uiCell = uiRow[key];
+                      cell.text = typeof uiCell === 'object' ? (uiCell.text || '') : uiCell;
                     }
                   }
                 }
