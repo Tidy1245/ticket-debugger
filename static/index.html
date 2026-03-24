@@ -328,8 +328,6 @@
     .vt-copy-ocr-mode .vt-area-overlay { cursor: copy; }
     .vt-resize-handle { width: 5px; cursor: col-resize; background: var(--border); transition: background 0.15s; flex-shrink: 0; }
     .vt-resize-handle:hover, .vt-resize-handle.active { background: var(--accent-blue); }
-    #vtTheadTable th { white-space: nowrap; }
-    #vtBodyTable { width: 100%; }
     .vc-edit-toggle { padding: 3px 10px; font-size: 11px; font-family: 'Fira Code', monospace; border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 4px; cursor: pointer; transition: all var(--transition); margin-left: 4px; }
     .vc-edit-toggle:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
     .vc-edit-toggle.active { background: rgba(245, 158, 11, 0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
@@ -1357,7 +1355,7 @@
                 </div>
               </div>
               <div class="vt-resize-handle" id="vtResizeHandle"></div>
-              <div class="vc-table-side" id="vtTableSide" style="overflow-y:auto;">
+              <div class="vc-table-side" id="vtTableSide" style="overflow:hidden;display:flex;flex-direction:column;">
                 <div id="vtTableContent"></div>
               </div>
             </div>
@@ -3959,18 +3957,13 @@
         });
         html += '</div>';
 
-        // Table header (fixed, not scrollable)
-        const visHeaders = headers.filter(h => vtVisibleColumns.has(h.key));
-        html += '<div class="vt-thead-wrap" style="flex-shrink:0;overflow:hidden;border:1px solid var(--border);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;">';
-        html += '<table id="vtTheadTable" style="width:100%;"><thead><tr>';
-        visHeaders.forEach(h => {
-          html += `<th title="${h.key}">${h.name || h.text || h.key}</th>`;
+        // Table window (single scrollable container with thead + tbody)
+        html += '<div class="table-container" id="vtBodyWrap" style="flex:1;min-height:0;overflow:auto;">';
+        html += '<table id="vtBodyTable"><thead><tr>';
+        headers.filter(h => vtVisibleColumns.has(h.key)).forEach(h => {
+          html += `<th title="${h.key}" style="position:sticky;top:0;z-index:2;background:var(--bg-card);">${h.name || h.text || h.key}</th>`;
         });
-        html += '</tr></thead></table></div>';
-
-        // Table body (scrollable independently)
-        html += '<div class="table-container" id="vtBodyWrap" style="flex:1;min-height:0;overflow:auto;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);">';
-        html += '<table id="vtBodyTable"><tbody>';
+        html += '</tr></thead><tbody>';
 
         rows.forEach(row => {
           const ri = allRows.indexOf(row);
@@ -4016,15 +4009,6 @@
       }
 
       el.innerHTML = html;
-
-      // Sync horizontal scroll between thead and tbody
-      const vtBodyWrap = document.getElementById('vtBodyWrap');
-      const vtTheadWrap = el.querySelector('.vt-thead-wrap');
-      if (vtBodyWrap && vtTheadWrap) {
-        vtBodyWrap.addEventListener('scroll', () => {
-          vtTheadWrap.scrollLeft = vtBodyWrap.scrollLeft;
-        });
-      }
 
       // Column toggle events
       el.querySelectorAll('.col-toggle[data-vtcol]').forEach(btn => {
