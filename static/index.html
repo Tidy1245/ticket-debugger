@@ -326,6 +326,8 @@
     .vc-icon-btn.disabled { opacity: 0.3; pointer-events: none; }
     .vc-copy-ocr-mode .vc-area-overlay { cursor: copy; }
     .vt-copy-ocr-mode .vt-area-overlay { cursor: copy; }
+    .vt-resize-handle { width: 5px; cursor: col-resize; background: var(--border); transition: background 0.15s; flex-shrink: 0; }
+    .vt-resize-handle:hover, .vt-resize-handle.active { background: var(--accent-blue); }
     .vc-edit-toggle { padding: 3px 10px; font-size: 11px; font-family: 'Fira Code', monospace; border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 4px; cursor: pointer; transition: all var(--transition); margin-left: 4px; }
     .vc-edit-toggle:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
     .vc-edit-toggle.active { background: rgba(245, 158, 11, 0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
@@ -1352,7 +1354,8 @@
                   <div class="vc-image-container" id="vtImageContainer"></div>
                 </div>
               </div>
-              <div class="vc-table-side" style="overflow-y:auto;">
+              <div class="vt-resize-handle" id="vtResizeHandle"></div>
+              <div class="vc-table-side" id="vtTableSide" style="overflow-y:auto;">
                 <div id="vtTableContent"></div>
               </div>
             </div>
@@ -2782,6 +2785,8 @@
     let vtSearchExact = false;
     let vtSegment = false;
     let vtVisibleColumns = null;
+    let vtTipMode = 'cell'; // 'cell' or 'group'
+    let vtHScroll = false;
 
     function renderVisualCheck() {
       vcPageIndex = 0;
@@ -3527,6 +3532,8 @@
       vtZoomLevel = 1;
       vtSearchQuery = '';
       vtVisibleColumns = null;
+      vtTipMode = 'cell';
+      vtHScroll = false;
       document.getElementById('vtImageViewport')?.classList.remove('vc-zoom-mode');
       document.getElementById('vtSaveBar').style.display = 'none';
       vtRenderPageNav();
@@ -3592,6 +3599,10 @@
         <button class="vc-icon-btn${vtZoomMode ? ' active' : ''}" id="vtZoomToggle" title="放大檢視"><img src="${vtZoomMode ? vcIcons.zoomAmber : vcIcons.zoomBlue}"></button>
         <button class="vc-icon-btn${vtSegment ? ' active' : ''}" id="vtSegToggle" title="長字分段"><img src="${vtSegment ? vcIcons.segAmber : vcIcons.segBlue}"></button>
         <button class="vc-icon-btn" id="vtExportCfg" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
+        <div class="tip-mode" style="margin-left:4px;">
+          <button class="tip-btn${vtTipMode === 'cell' ? ' active' : ''}" id="vtTipCell">Cell</button>
+          <button class="tip-btn${vtTipMode === 'group' ? ' active' : ''}" id="vtTipGroup">Group</button>
+        </div>
         <div class="search-bar vc-search-bar">
           <span class="vc-group-info" id="vtRowInfo">${rowInfo}</span>
           <div class="search-wrap">
@@ -3677,6 +3688,19 @@
       document.getElementById('vtSearchExact')?.addEventListener('click', () => {
         vtSearchExact = !vtSearchExact;
         vtRenderTable();
+      });
+      // Cell/Group toggle
+      document.getElementById('vtTipCell')?.addEventListener('click', () => {
+        vtTipMode = 'cell';
+        vtActiveHighlight = null;
+        vtRenderHighlight();
+        vtRenderPageNav();
+      });
+      document.getElementById('vtTipGroup')?.addEventListener('click', () => {
+        vtTipMode = 'group';
+        vtActiveHighlight = null;
+        vtRenderHighlight();
+        vtRenderPageNav();
       });
     }
 
@@ -3928,7 +3952,7 @@
         html += '<div style="margin:8px;">';
         html += `<div class="section-header" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">`;
         html += `${t.name || 'Table'} <span class="count">${rows.length}${q ? '/' + allRows.length : ''} rows</span>`;
-        html += `<button class="vc-icon-btn${vtEditMode ? ' active' : ''}" id="vtTableEditToggle" title="編輯模式"><img src="${vtEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>`;
+        html += `<button class="vc-icon-btn${vtHScroll ? ' active' : ''}" id="vtHScrollToggle" title="滾動切換" style="margin-left:4px;"><svg viewBox="0 0 18 18" width="16" height="16" style="display:block;"><path d="${vtHScroll ? 'M2 9h14M5 6l-3 3 3 3M13 6l3 3-3 3' : 'M9 2v14M6 5L9 2l3 3M6 13l3 3 3-3'}" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
         html += `</div>`;
 
         // Column toggles
@@ -4006,13 +4030,24 @@
         el.querySelectorAll('td.locatable, .area-value.locatable').forEach(td => {
           td.addEventListener('click', () => {
             let items = [];
-            if (td.dataset.arealist) {
-              try {
-                const al = JSON.parse(td.dataset.arealist);
-                items = al.map(a => ({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx }));
-              } catch(e) {}
-            } else if (td.dataset.rx) {
-              items = [{ x: parseFloat(td.dataset.rx), y: parseFloat(td.dataset.ry), w: parseFloat(td.dataset.rw), h: parseFloat(td.dataset.rh), regNdx: parseInt(td.dataset.rp) }];
+            if (vtTipMode === 'group') {
+              // Highlight all cells in the row
+              const tr = td.closest('tr');
+              if (tr) {
+                tr.querySelectorAll('td.locatable').forEach(cell => {
+                  if (cell.dataset.arealist) {
+                    try { JSON.parse(cell.dataset.arealist).forEach(a => items.push({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx })); } catch(e) {}
+                  } else if (cell.dataset.rx) {
+                    items.push({ x: +cell.dataset.rx, y: +cell.dataset.ry, w: +cell.dataset.rw, h: +cell.dataset.rh, regNdx: parseInt(cell.dataset.rp) });
+                  }
+                });
+              }
+            } else {
+              if (td.dataset.arealist) {
+                try { JSON.parse(td.dataset.arealist).forEach(a => items.push({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx })); } catch(e) {}
+              } else if (td.dataset.rx) {
+                items.push({ x: +td.dataset.rx, y: +td.dataset.ry, w: +td.dataset.rw, h: +td.dataset.rh, regNdx: parseInt(td.dataset.rp) });
+              }
             }
             if (items.length) {
               el.querySelectorAll('tr.row-active').forEach(r => r.classList.remove('row-active'));
@@ -4025,10 +4060,9 @@
       }
 
       // Edit toggle in table header
-      document.getElementById('vtTableEditToggle')?.addEventListener('click', () => {
-        if (vtEditMode) syncVtDomToData();
-        vtEditMode = !vtEditMode;
-        vtRenderPageNav();
+      // HScroll toggle
+      document.getElementById('vtHScrollToggle')?.addEventListener('click', () => {
+        vtHScroll = !vtHScroll;
         vtRenderTable();
       });
 
@@ -4143,6 +4177,47 @@
       vtDragging = false;
       document.getElementById('vtImageViewport')?.classList.remove('vc-dragging');
     });
+
+    // VT Resize handle: drag to resize image/table split
+    {
+      const handle = document.getElementById('vtResizeHandle');
+      let vtResizing = false, vtResizeStartX = 0, vtStartWidth = 0;
+      handle?.addEventListener('mousedown', (e) => {
+        vtResizing = true;
+        vtResizeStartX = e.clientX;
+        const imgSide = handle.previousElementSibling;
+        vtStartWidth = imgSide.getBoundingClientRect().width;
+        handle.classList.add('active');
+        e.preventDefault();
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!vtResizing) return;
+        const imgSide = document.getElementById('vtResizeHandle')?.previousElementSibling;
+        if (!imgSide) return;
+        const newWidth = vtStartWidth + (e.clientX - vtResizeStartX);
+        const container = imgSide.parentElement;
+        const minW = 200, maxW = container.clientWidth - 200;
+        imgSide.style.flex = 'none';
+        imgSide.style.width = Math.max(minW, Math.min(maxW, newWidth)) + 'px';
+      });
+      window.addEventListener('mouseup', () => {
+        if (!vtResizing) return;
+        vtResizing = false;
+        document.getElementById('vtResizeHandle')?.classList.remove('active');
+        // Recalc image after resize
+        vtRenderHighlight();
+        vtRenderAreaOverlays();
+      });
+    }
+
+    // VT Horizontal scroll: wheel on table side
+    document.getElementById('vtTableSide')?.addEventListener('wheel', (e) => {
+      if (!vtHScroll) return;
+      const tc = document.querySelector('#vtTableContent .table-container');
+      if (!tc) return;
+      e.preventDefault();
+      tc.scrollLeft += e.deltaY;
+    }, { passive: false });
 
     // VT Save bar handlers
     document.getElementById('vtSaveAsAnswer')?.addEventListener('click', async () => {
