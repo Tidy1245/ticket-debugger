@@ -2016,6 +2016,29 @@
     let tableSearchExact = false;
     let tableEditMode = false;
 
+    // Sync Table Data DOM edits back to ticketData
+    function syncTableDomToData() {
+      if (!ticketData) return;
+      // Sync table cells
+      document.querySelectorAll('#tableContent td[data-key][data-row]').forEach(td => {
+        const ri = parseInt(td.dataset.row);
+        const key = td.dataset.key;
+        const tables = ticketData.tables || [];
+        if (tables[0]?.rows?.[ri]?.[key]) {
+          tables[0].rows[ri][key].text = td.textContent;
+        }
+      });
+      // Sync area fields
+      document.querySelectorAll('#tableContent .area-item').forEach(el => {
+        const key = el.querySelector('.area-label')?.textContent || '';
+        const val = el.querySelector('.area-value')?.textContent || '';
+        if (key && ticketData.areas) {
+          const area = ticketData.areas.find(a => a.key === key);
+          if (area) area.text = val;
+        }
+      });
+    }
+
     function tableSearchMatch(value, query) {
       if (!query) return true;
       const v = tableSearchCaseSensitive ? value : value.toLowerCase();
@@ -2193,26 +2216,7 @@
       document.getElementById('tableEditToggle')?.addEventListener('click', () => {
         // Sync DOM edits back to ticketData before leaving edit mode
         if (tableEditMode) {
-          const tds = document.querySelectorAll('#tableContent td[data-key][data-row]');
-          let syncCount = 0;
-          tds.forEach(td => {
-            const ri = parseInt(td.dataset.row);
-            const key = td.dataset.key;
-            const tables = ticketData?.tables || [];
-            if (tables[0] && tables[0].rows && tables[0].rows[ri] && tables[0].rows[ri][key]) {
-              tables[0].rows[ri][key].text = td.textContent;
-              syncCount++;
-            }
-          });
-          alert(`Sync: found ${tds.length} tds, synced ${syncCount}. Item_No=${ticketData?.tables?.[0]?.rows?.[0]?.Item_No?.text}`);
-          document.querySelectorAll('#tableContent .area-item').forEach(el => {
-            const key = el.querySelector('.area-label')?.textContent || '';
-            const val = el.querySelector('.area-value')?.textContent || '';
-            if (key && ticketData?.areas) {
-              const area = ticketData.areas.find(a => a.key === key);
-              if (area) area.text = val;
-            }
-          });
+          syncTableDomToData();
         }
         tableEditMode = !tableEditMode;
         renderTable();
@@ -2742,17 +2746,14 @@
           const isListFormat = Array.isArray(rawInteg);
           const integList = isListFormat ? rawInteg : (rawInteg ? [rawInteg] : []);
 
-          // Debug: check ticketData first row
-          const dbgRow0 = ticketData?.tables?.[0]?.rows?.[0];
-          if (dbgRow0) {
-            const keys = Object.keys(dbgRow0).slice(0, 3);
-            const vals = keys.map(k => `${k}=${JSON.stringify(typeof dbgRow0[k] === 'object' ? dbgRow0[k].text : dbgRow0[k])}`);
-            alert('ticketData row[0]: ' + vals.join(', '));
-          } else {
-            alert('ticketData row[0] not found. tables count=' + (ticketData?.tables?.length || 0));
-          }
+          // Sync any pending DOM edits to ticketData first
+          syncTableDomToData();
+          // Debug
+          const _r0 = ticketData?.tables?.[0]?.rows?.[0];
+          const _tds = document.querySelectorAll('#tableContent td[data-key][data-row]').length;
+          alert(`tds in DOM: ${_tds}, tableEditMode: ${tableEditMode}, Item_No: ${_r0?.Item_No?.text}`);
 
-          // Always read from ticketData (synced on edit mode exit)
+          // Read from ticketData
           const allTables = ticketData.tables || [];
           let cfgTableIdx = 0;
           for (const integ of integList) {
