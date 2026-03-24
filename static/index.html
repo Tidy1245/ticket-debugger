@@ -328,6 +328,7 @@
     .vt-copy-ocr-mode .vt-area-overlay { cursor: copy; }
     .vt-resize-handle { width: 5px; cursor: col-resize; background: var(--border); transition: background 0.15s; flex-shrink: 0; }
     .vt-resize-handle:hover, .vt-resize-handle.active { background: var(--accent-blue); }
+    #vtTableContent table thead th { position: sticky; top: 0; z-index: 2; background: var(--bg-card); }
     .vc-edit-toggle { padding: 3px 10px; font-size: 11px; font-family: 'Fira Code', monospace; border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 4px; cursor: pointer; transition: all var(--transition); margin-left: 4px; }
     .vc-edit-toggle:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
     .vc-edit-toggle.active { background: rgba(245, 158, 11, 0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
@@ -3597,7 +3598,6 @@
         <button class="vc-icon-btn${vtShowOcr ? ' active' : ''}${vtCopyOcr ? ' disabled' : ''}" id="vtShowOcrBtn" title="顯示OCR區域"><img src="${vtShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
         <button class="vc-icon-btn${vtShowText ? ' active' : ''}${!vtShowOcr ? ' disabled' : ''}" id="vtShowTextBtn" title="顯示OCR文字"><img src="${vtShowText ? vcIcons.textAmber : vcIcons.textBlue}"></button>
         <button class="vc-icon-btn${vtZoomMode ? ' active' : ''}" id="vtZoomToggle" title="放大檢視"><img src="${vtZoomMode ? vcIcons.zoomAmber : vcIcons.zoomBlue}"></button>
-        <button class="vc-icon-btn${vtSegment ? ' active' : ''}" id="vtSegToggle" title="長字分段"><img src="${vtSegment ? vcIcons.segAmber : vcIcons.segBlue}"></button>
         <button class="vc-icon-btn" id="vtExportCfg" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
         <div class="tip-mode" style="margin-left:4px;">
           <button class="tip-btn${vtTipMode === 'cell' ? ' active' : ''}" id="vtTipCell">Cell</button>
@@ -3634,11 +3634,6 @@
         document.getElementById('vtImageViewport').classList.toggle('vc-zoom-mode', vtZoomMode);
         vtRenderPageNav();
         vtApplyZoom();
-      });
-      document.getElementById('vtSegToggle').addEventListener('click', () => {
-        vtSegment = !vtSegment;
-        vtRenderPageNav();
-        vtRenderTable();
       });
       document.getElementById('vtExportCfg').addEventListener('click', exportConfigJson);
       document.getElementById('vtEditToggle').addEventListener('click', () => {
@@ -3949,22 +3944,23 @@
           });
         }) : allRows;
 
-        html += '<div style="margin:8px;">';
-        html += `<div class="section-header" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">`;
+        const hScrollColor = vtHScroll ? 'var(--accent-amber)' : 'var(--accent-blue)';
+        html += '<div style="margin:8px;display:flex;flex-direction:column;flex:1;min-height:0;">';
+        html += `<div class="section-header" style="flex-shrink:0;display:flex;align-items:center;gap:8px;margin-bottom:6px;">`;
         html += `${t.name || 'Table'} <span class="count">${rows.length}${q ? '/' + allRows.length : ''} rows</span>`;
-        html += `<button class="vc-icon-btn${vtHScroll ? ' active' : ''}" id="vtHScrollToggle" title="滾動切換" style="margin-left:4px;"><svg viewBox="0 0 18 18" width="16" height="16" style="display:block;"><path d="${vtHScroll ? 'M2 9h14M5 6l-3 3 3 3M13 6l3 3-3 3' : 'M9 2v14M6 5L9 2l3 3M6 13l3 3 3-3'}" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
+        html += `<button class="vc-icon-btn${vtHScroll ? ' active' : ''}" id="vtHScrollToggle" title="滾動切換" style="margin-left:4px;"><svg viewBox="0 0 18 18" width="16" height="16" style="display:block;"><path d="${vtHScroll ? 'M2 9h14M5 6l-3 3 3 3M13 6l3 3-3 3' : 'M9 2v14M6 5L9 2l3 3M6 13l3 3 3-3'}" stroke="${hScrollColor}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`;
         html += `</div>`;
 
-        // Column toggles
-        html += '<div class="col-toggles">';
+        // Column toggles (sticky)
+        html += '<div class="col-toggles" style="flex-shrink:0;">';
         headers.forEach(h => {
           html += `<span class="col-toggle ${vtVisibleColumns.has(h.key) ? 'active' : ''}" data-vtcol="${h.key}">${h.name || h.text || h.key}</span>`;
         });
         html += '</div>';
 
-        // Table
+        // Table (scrollable body, sticky thead)
         html += '<div class="table-container" style="flex:1;min-height:0;overflow:auto;">';
-        html += '<table><thead><tr>';
+        html += '<table><thead><tr style="position:sticky;top:0;z-index:2;">';
         headers.filter(h => vtVisibleColumns.has(h.key)).forEach(h => {
           html += `<th title="${h.key}">${h.name || h.text || h.key}</th>`;
         });
