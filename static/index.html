@@ -2019,7 +2019,7 @@
     // Sync Table Data DOM edits back to ticketData
     function syncTableDomToData() {
       if (!ticketData) return;
-      // Sync table cells
+      // Sync table cells (only if in edit mode — data-key/data-row only exist then)
       document.querySelectorAll('#tableContent td[data-key][data-row]').forEach(td => {
         const ri = parseInt(td.dataset.row);
         const key = td.dataset.key;
@@ -2028,15 +2028,65 @@
           tables[0].rows[ri][key].text = td.textContent;
         }
       });
-      // Sync area fields
-      document.querySelectorAll('#tableContent .area-item').forEach(el => {
-        const key = el.querySelector('.area-label')?.textContent || '';
-        const val = el.querySelector('.area-value')?.textContent || '';
-        if (key && ticketData.areas) {
-          const area = ticketData.areas.find(a => a.key === key);
-          if (area) area.text = val;
+      // Sync area fields (contenteditable .area-value)
+      document.querySelectorAll('#tableContent .area-value[contenteditable]').forEach(el => {
+        const label = el.closest('.area-item')?.querySelector('.area-label')?.textContent || '';
+        if (label && ticketData.areas) {
+          const area = ticketData.areas.find(a => a.key === label);
+          if (area) area.text = el.textContent;
         }
       });
+    }
+
+    // Export config.json with current table edits
+    async function exportConfigJson() {
+      if (!currentTicket || !ticketData) return;
+      try {
+        // Sync any pending DOM edits
+        syncTableDomToData();
+
+        // Fetch raw config
+        const config = await fetchJSON(`/api/tickets/${currentTicket}/config`);
+        const rawInteg = config.integrator;
+        const integList = Array.isArray(rawInteg) ? rawInteg : (rawInteg ? [rawInteg] : []);
+
+        // Write ticketData values into config
+        const allTables = ticketData.tables || [];
+        let cfgTableIdx = 0;
+        for (const integ of integList) {
+          for (const cfgTable of (integ.tableList || [])) {
+            const uiTable = allTables[cfgTableIdx++];
+            if (!uiTable?.rows) continue;
+            for (let ri = 0; ri < (cfgTable.data || []).length; ri++) {
+              const uiRow = uiTable.rows[ri];
+              if (!uiRow) continue;
+              for (const cell of cfgTable.data[ri]) {
+                const key = cell.key || cell.name || '';
+                if (!key) continue;
+                const uiCell = uiRow[key];
+                if (uiCell !== undefined) {
+                  cell.text = typeof uiCell === 'object' ? (uiCell.text ?? '') : String(uiCell);
+                }
+              }
+            }
+          }
+          for (const cfgArea of (integ.areaList || [])) {
+            const key = cfgArea.key || cfgArea.name || '';
+            if (!key) continue;
+            const uiArea = (ticketData.areas || []).find(a => a.key === key);
+            if (uiArea) cfgArea.text = uiArea.text ?? '';
+          }
+        }
+
+        // Download
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `config_${currentTicket}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) { alert('匯出失敗: ' + e.message); }
     }
 
     function tableSearchMatch(value, query) {
@@ -2144,6 +2194,7 @@
           <div class="section-header" style="flex-shrink:0;display:flex;align-items:center;gap:8px;">
             ${t.name || 'Table'} <span class="count">${rowCountLabel}</span>
             <button class="vc-icon-btn${tableEditMode ? ' active' : ''}" id="tableEditToggle" style="margin-left:8px;" title="編輯模式"><img src="${tableEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>
+            <button class="vc-icon-btn" id="tableExportCfg" style="margin-left:2px;" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
           </div>
           <div class="col-toggles">
             ${headers.map(h => `<span class="col-toggle ${visibleColumns.has(h.key) ? 'active' : ''}" data-col="${h.key}">${h.name || h.text || h.key}</span>`).join('')}
@@ -2221,6 +2272,7 @@
         tableEditMode = !tableEditMode;
         renderTable();
       });
+      document.getElementById('tableExportCfg')?.addEventListener('click', exportConfigJson);
 
       // Save answer (edit mode)
       document.getElementById('tableSaveAnswer')?.addEventListener('click', async () => {
@@ -2737,64 +2789,7 @@
         vcRenderPageNav();
         vcRenderTable();
       });
-      document.getElementById('vcExportCfg').addEventListener('click', async () => {
-        if (!currentTicket || !ticketData) return;
-        try {
-          // Fetch raw config
-          const config = await fetchJSON(`/api/tickets/${currentTicket}/config`);
-          const rawInteg = config.integrator;
-          const isListFormat = Array.isArray(rawInteg);
-          const integList = isListFormat ? rawInteg : (rawInteg ? [rawInteg] : []);
-
-          // Sync any pending DOM edits to ticketData first
-          syncTableDomToData();
-          // Debug
-          const _r0 = ticketData?.tables?.[0]?.rows?.[0];
-          const _tds = document.querySelectorAll('#tableContent td[data-key][data-row]').length;
-          alert(`tds in DOM: ${_tds}, tableEditMode: ${tableEditMode}, Item_No: ${_r0?.Item_No?.text}`);
-
-          // Read from ticketData
-          const allTables = ticketData.tables || [];
-          let cfgTableIdx = 0;
-          for (const integ of integList) {
-            for (const cfgTable of (integ.tableList || [])) {
-              const uiTable = allTables[cfgTableIdx];
-              cfgTableIdx++;
-              if (!uiTable?.rows) continue;
-              const cfgData = cfgTable.data || [];
-              for (let ri = 0; ri < cfgData.length; ri++) {
-                const uiRow = uiTable.rows[ri];
-                if (!uiRow) continue;
-                for (const cell of cfgData[ri]) {
-                  const key = cell.key || cell.name || '';
-                  if (!key) continue;
-                  const uiCell = uiRow[key];
-                  if (uiCell !== undefined) {
-                    cell.text = typeof uiCell === 'object' ? (uiCell.text ?? '') : String(uiCell);
-                  }
-                }
-              }
-            }
-            // Update area fields
-            for (const cfgArea of (integ.areaList || [])) {
-              const key = cfgArea.key || cfgArea.name || '';
-              if (!key) continue;
-              const uiArea = (ticketData.areas || []).find(a => a.key === key);
-              if (uiArea) cfgArea.text = uiArea.text ?? '';
-            }
-          }
-
-
-          // Download
-          const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `config_${currentTicket}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
-        } catch (e) { alert('匯出失敗: ' + e.message); }
-      });
+      document.getElementById('vcExportCfg').addEventListener('click', exportConfigJson);
       document.getElementById('vcEditToggle').addEventListener('click', () => {
         vcEditMode = !vcEditMode;
         document.getElementById('vcSaveBar').style.display = vcEditMode ? 'flex' : 'none';
