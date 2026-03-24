@@ -1501,20 +1501,28 @@
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById(`panel${capitalize(tab.dataset.tab)}`).classList.add('active');
-        prevActiveTab = tab.dataset.tab;
+        // Sync edits from outgoing tab before switching
+        if (prevActiveTab === 'table' && tableEditMode) syncTableDomToData();
+        if (prevActiveTab === 'visual' && vcEditMode) syncVcDomToData();
+        const newTab = tab.dataset.tab;
+        prevActiveTab = newTab;
         resetDmBtn();
         document.getElementById('panelData').style.display = 'none';
+        // Re-render incoming tab with synced data
+        if (newTab === 'table') {
+          renderTable();
+        }
+        if (newTab === 'visual') {
+          vcRenderTable();
+          requestAnimationFrame(() => vcRenderHighlight());
+        }
         // Re-apply zoom when switching to Images tab (viewport may have been hidden)
-        if (tab.dataset.tab === 'images') {
+        if (newTab === 'images') {
           const img = document.getElementById('pageImg');
           if (img && img.naturalWidth) {
             zoomLevel = calcFitZoom(currentViewMode);
             applyZoom();
           }
-        }
-        // Re-render highlight when switching to Visual Check tab (panel was hidden)
-        if (tab.dataset.tab === 'visual') {
-          requestAnimationFrame(() => vcRenderHighlight());
         }
       });
     });
@@ -2038,12 +2046,38 @@
       });
     }
 
+    // Sync Visual Check DOM edits back to ticketData
+    function syncVcDomToData() {
+      if (!ticketData) return;
+      const areas = ticketData.areas || [];
+      const tables = ticketData.tables || [];
+      // Sync fields
+      document.querySelectorAll('#vcTableContent .vc-field-item[data-type="field"]').forEach(el => {
+        const fi = parseInt(el.dataset.fi);
+        const val = el.querySelector('.vc-field-value')?.textContent || '';
+        if (areas[fi]) areas[fi].text = val;
+      });
+      // Sync table cells
+      document.querySelectorAll('#vcTableContent .vc-field-item[data-type="cell"]').forEach(el => {
+        const ri = parseInt(el.dataset.ri);
+        const ci = parseInt(el.dataset.ci);
+        const val = el.querySelector('.vc-field-value')?.textContent || '';
+        if (!tables[0]?.rows?.[ri]) return;
+        const headers = tables[0].headers || [];
+        const h = headers[ci];
+        if (h && tables[0].rows[ri][h.key]) {
+          tables[0].rows[ri][h.key].text = val;
+        }
+      });
+    }
+
     // Export config.json with current table edits
     async function exportConfigJson() {
       if (!currentTicket || !ticketData) return;
       try {
-        // Sync any pending DOM edits
+        // Sync any pending DOM edits from both tabs
         syncTableDomToData();
+        syncVcDomToData();
 
         // Fetch raw config
         const config = await fetchJSON(`/api/tickets/${currentTicket}/config`);
@@ -2791,6 +2825,8 @@
       });
       document.getElementById('vcExportCfg').addEventListener('click', exportConfigJson);
       document.getElementById('vcEditToggle').addEventListener('click', () => {
+        // Sync VC edits before leaving edit mode
+        if (vcEditMode) syncVcDomToData();
         vcEditMode = !vcEditMode;
         document.getElementById('vcSaveBar').style.display = vcEditMode ? 'flex' : 'none';
         vcRenderPageNav();
