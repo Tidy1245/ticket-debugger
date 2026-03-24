@@ -325,6 +325,7 @@
     .vc-icon-btn.active { border-color: var(--accent-amber); background: rgba(245, 158, 11, 0.08); }
     .vc-icon-btn.disabled { opacity: 0.3; pointer-events: none; }
     .vc-copy-ocr-mode .vc-area-overlay { cursor: copy; }
+    .vt-copy-ocr-mode .vt-area-overlay { cursor: copy; }
     .vc-edit-toggle { padding: 3px 10px; font-size: 11px; font-family: 'Fira Code', monospace; border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 4px; cursor: pointer; transition: all var(--transition); margin-left: 4px; }
     .vc-edit-toggle:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
     .vc-edit-toggle.active { background: rgba(245, 158, 11, 0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
@@ -1261,6 +1262,7 @@
           <div class="tab" data-tab="vlm">VLM Grouping</div>
           <div class="tab" data-tab="check">VLM Answer</div>
           <div class="tab" data-tab="visual">Visual Check</div>
+          <div class="tab" data-tab="vtable">Visual Table</div>
         </div>
         <div class="content">
           <!-- Overview Panel -->
@@ -1338,6 +1340,25 @@
             <div class="vc-save-bar" id="vcSaveBar" style="display:none;">
               <button class="vlm-detail-btn btn-green" id="vcSaveAsAnswer">儲存</button>
               <button class="vlm-detail-btn btn-amber" id="vcRevertEdit">復原</button>
+            </div>
+          </div>
+
+          <!-- Visual Table Panel -->
+          <div class="panel" id="panelVtable" style="overflow:hidden;">
+            <div class="vc-page-nav" id="vtPageNav"></div>
+            <div class="vc-split" style="flex:1;min-height:0;">
+              <div class="vc-image-side">
+                <div class="vc-image-viewport" id="vtImageViewport">
+                  <div class="vc-image-container" id="vtImageContainer"></div>
+                </div>
+              </div>
+              <div class="vc-table-side" style="overflow-y:auto;">
+                <div id="vtTableContent"></div>
+              </div>
+            </div>
+            <div class="vc-save-bar" id="vtSaveBar" style="display:none;">
+              <button class="vlm-detail-btn btn-green" id="vtSaveAsAnswer">儲存</button>
+              <button class="vlm-detail-btn btn-amber" id="vtRevertEdit">復原</button>
             </div>
           </div>
 
@@ -1419,6 +1440,9 @@
       if (vcActiveHighlight && vcActiveHighlight.items) {
         vcRenderHighlight();
       }
+      // 3. Visual Table: re-render zoom + highlight + overlays
+      if (typeof vtZoomMode !== 'undefined') vtApplyZoom();
+      vtRenderAreaOverlays();
     }
     document.querySelector('.sidebar').addEventListener('transitionend', (e) => {
       if (e.propertyName === 'width') onSidebarTransitionEnd();
@@ -1489,6 +1513,7 @@
       await loadDataAnswersList();
       renderCheckPanel();
       renderVisualCheck();
+      renderVisualTable();
       renderDataPanel();
       loadPageImage();
     }
@@ -1504,6 +1529,7 @@
         // Sync edits from outgoing tab before switching
         if (prevActiveTab === 'table' && tableEditMode) syncTableDomToData();
         if (prevActiveTab === 'visual' && vcEditMode) syncVcDomToData();
+        if (prevActiveTab === 'vtable' && vtEditMode) syncVtDomToData();
         const newTab = tab.dataset.tab;
         prevActiveTab = newTab;
         resetDmBtn();
@@ -1515,6 +1541,10 @@
         if (newTab === 'visual') {
           vcRenderTable();
           requestAnimationFrame(() => vcRenderHighlight());
+        }
+        if (newTab === 'vtable') {
+          vtRenderTable();
+          requestAnimationFrame(() => vtRenderHighlight());
         }
         // Re-apply zoom when switching to Images tab (viewport may have been hidden)
         if (newTab === 'images') {
@@ -2075,9 +2105,10 @@
     async function exportConfigJson() {
       if (!currentTicket || !ticketData) return;
       try {
-        // Sync any pending DOM edits from both tabs
+        // Sync any pending DOM edits from all tabs
         syncTableDomToData();
         syncVcDomToData();
+        syncVtDomToData();
 
         // Fetch raw config
         const config = await fetchJSON(`/api/tickets/${currentTicket}/config`);
@@ -2735,6 +2766,22 @@
     let vcSearchCase = false;
     let vcSearchExact = false;
     let vcSegment = false;
+
+    // === Visual Table state ===
+    let vtPageIndex = 0;
+    let vtProcessorImgSize = null;
+    let vtActiveHighlight = null;
+    let vtEditMode = false;
+    let vtCopyOcr = false;
+    let vtShowOcr = false;
+    let vtShowText = false;
+    let vtZoomMode = false;
+    let vtZoomLevel = 1;
+    let vtSearchQuery = '';
+    let vtSearchCase = false;
+    let vtSearchExact = false;
+    let vtSegment = false;
+    let vtVisibleColumns = null;
 
     function renderVisualCheck() {
       vcPageIndex = 0;
@@ -3465,6 +3512,683 @@
           el.contentEditable = 'true';
         });
       }
+    });
+
+    // === Visual Table functions ===
+    function renderVisualTable() {
+      vtPageIndex = 0;
+      vtProcessorImgSize = null;
+      vtActiveHighlight = null;
+      vtEditMode = false;
+      vtCopyOcr = false;
+      vtShowOcr = false;
+      vtShowText = false;
+      vtZoomMode = false;
+      vtZoomLevel = 1;
+      vtSearchQuery = '';
+      vtVisibleColumns = null;
+      document.getElementById('vtImageViewport')?.classList.remove('vc-zoom-mode');
+      document.getElementById('vtSaveBar').style.display = 'none';
+      vtRenderPageNav();
+      vtLoadImage();
+      vtRenderTable();
+    }
+
+    function vtSearchMatch(value, query) {
+      if (!query) return true;
+      const v = vtSearchCase ? value : value.toLowerCase();
+      const q = vtSearchCase ? query : query.toLowerCase();
+      return vtSearchExact ? v === q : v.includes(q);
+    }
+
+    function vtHighlightText(text, query) {
+      if (!query) return escHtml(text);
+      const q = vtSearchCase ? query : query.toLowerCase();
+      const searchText = vtSearchCase ? text : text.toLowerCase();
+      if (vtSearchExact) {
+        return searchText === q ? `<span class="vc-search-hit">${escHtml(text)}</span>` : escHtml(text);
+      }
+      let result = '', lastIndex = 0, idx;
+      while ((idx = searchText.indexOf(q, lastIndex)) !== -1) {
+        result += escHtml(text.slice(lastIndex, idx));
+        result += `<span class="vc-search-hit">${escHtml(text.slice(idx, idx + q.length))}</span>`;
+        lastIndex = idx + q.length;
+      }
+      result += escHtml(text.slice(lastIndex));
+      return result;
+    }
+
+    function vtRenderPageNav() {
+      const pages = ticketData?.pages || [];
+      const total = pages.length;
+      const nav = document.getElementById('vtPageNav');
+      if (!nav) return;
+
+      const tables = ticketData?.tables || [];
+      const allRows = tables[0]?.rows || [];
+      const q = vtSearchQuery;
+      let filteredCount = allRows.length;
+      if (q) {
+        const headers = tables[0]?.headers || [];
+        filteredCount = allRows.filter(row => {
+          return headers.some(h => {
+            const cell = row[h.key] || {};
+            const text = cell.text || '';
+            return vtSearchMatch(text, q);
+          });
+        }).length;
+      }
+      const rowInfo = q ? `${filteredCount}/${allRows.length} rows` : `${allRows.length} rows`;
+
+      nav.innerHTML = `
+        <button class="page-btn" id="vtPrev" ${vtPageIndex <= 0 ? 'disabled' : ''}>Prev</button>
+        <span class="page-info">Page ${vtPageIndex + 1} / ${total}</span>
+        <button class="page-btn" id="vtNext" ${vtPageIndex >= total - 1 ? 'disabled' : ''}>Next</button>
+        <input class="page-jump-input" id="vtJump" type="number" min="1" max="${total}" value="${vtPageIndex + 1}">
+        <button class="vc-icon-btn${vtEditMode ? ' active' : ''}" id="vtEditToggle" title="編輯模式"><img src="${vtEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>
+        <button class="vc-icon-btn${vtCopyOcr ? ' active' : ''}" id="vtCopyOcrToggle" title="複製OCR文字"><img src="${vtCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
+        <button class="vc-icon-btn${vtShowOcr ? ' active' : ''}${vtCopyOcr ? ' disabled' : ''}" id="vtShowOcrBtn" title="顯示OCR區域"><img src="${vtShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
+        <button class="vc-icon-btn${vtShowText ? ' active' : ''}${!vtShowOcr ? ' disabled' : ''}" id="vtShowTextBtn" title="顯示OCR文字"><img src="${vtShowText ? vcIcons.textAmber : vcIcons.textBlue}"></button>
+        <button class="vc-icon-btn${vtZoomMode ? ' active' : ''}" id="vtZoomToggle" title="放大檢視"><img src="${vtZoomMode ? vcIcons.zoomAmber : vcIcons.zoomBlue}"></button>
+        <button class="vc-icon-btn${vtSegment ? ' active' : ''}" id="vtSegToggle" title="長字分段"><img src="${vtSegment ? vcIcons.segAmber : vcIcons.segBlue}"></button>
+        <button class="vc-icon-btn" id="vtExportCfg" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
+        <div class="search-bar vc-search-bar">
+          <span class="vc-group-info" id="vtRowInfo">${rowInfo}</span>
+          <div class="search-wrap">
+            <input type="text" id="vtSearchInput" placeholder="搜尋欄位..." value="${escHtml(vtSearchQuery)}">
+            <button class="search-clear" id="vtSearchClear">&times;</button>
+          </div>
+          <button class="search-toggle ${vtSearchCase ? 'active' : ''}" id="vtSearchCase" title="Match Case">Aa</button>
+          <button class="search-toggle ${vtSearchExact ? 'active' : ''}" id="vtSearchExact" title="Match Whole Word" style="font-size:12px;font-weight:700;font-family:'Fira Code',monospace;letter-spacing:-0.5px;">ab<span style="position:absolute;bottom:2px;left:4px;right:4px;height:1.5px;background:currentColor;border-radius:1px;"></span></button>
+        </div>
+      `;
+      document.getElementById('vtPrev').onclick = () => vtSwitchPage(vtPageIndex - 1);
+      document.getElementById('vtNext').onclick = () => vtSwitchPage(vtPageIndex + 1);
+      document.getElementById('vtJump').addEventListener('keydown', e => {
+        if (e.key === 'Enter') vtSwitchPage(parseInt(e.target.value) - 1);
+      });
+      document.getElementById('vtShowOcrBtn').addEventListener('click', () => {
+        vtShowOcr = !vtShowOcr;
+        vtRenderPageNav();
+        vtRenderAreaOverlays();
+      });
+      document.getElementById('vtShowTextBtn').addEventListener('click', () => {
+        vtShowText = !vtShowText;
+        vtRenderPageNav();
+        vtRenderAreaOverlays();
+      });
+      document.getElementById('vtZoomToggle').addEventListener('click', () => {
+        vtZoomMode = !vtZoomMode;
+        vtZoomLevel = 1;
+        document.getElementById('vtImageViewport').classList.toggle('vc-zoom-mode', vtZoomMode);
+        vtRenderPageNav();
+        vtApplyZoom();
+      });
+      document.getElementById('vtSegToggle').addEventListener('click', () => {
+        vtSegment = !vtSegment;
+        vtRenderPageNav();
+        vtRenderTable();
+      });
+      document.getElementById('vtExportCfg').addEventListener('click', exportConfigJson);
+      document.getElementById('vtEditToggle').addEventListener('click', () => {
+        if (vtEditMode) syncVtDomToData();
+        vtEditMode = !vtEditMode;
+        document.getElementById('vtSaveBar').style.display = vtEditMode ? 'flex' : 'none';
+        vtRenderPageNav();
+        vtRenderTable();
+        vtRenderAreaOverlays();
+      });
+      document.getElementById('vtCopyOcrToggle').addEventListener('click', () => {
+        vtCopyOcr = !vtCopyOcr;
+        if (vtCopyOcr) {
+          vtShowOcr = true;
+        } else {
+          vtShowOcr = false;
+        }
+        document.getElementById('vtImageContainer').classList.toggle('vt-copy-ocr-mode', vtCopyOcr);
+        vtRenderPageNav();
+        vtRenderAreaOverlays();
+      });
+
+      // VT Search
+      const vtSearchInputEl = document.getElementById('vtSearchInput');
+      if (vtSearchInputEl) {
+        let vtSearchTimer;
+        vtSearchInputEl.addEventListener('input', (e) => {
+          clearTimeout(vtSearchTimer);
+          vtSearchTimer = setTimeout(() => {
+            vtSearchQuery = e.target.value;
+            vtRenderTable();
+            const el = document.getElementById('vtSearchInput');
+            if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length; }
+          }, 300);
+        });
+      }
+      document.getElementById('vtSearchClear')?.addEventListener('click', () => {
+        vtSearchQuery = '';
+        const inp = document.getElementById('vtSearchInput');
+        if (inp) inp.value = '';
+        vtRenderTable();
+      });
+      document.getElementById('vtSearchCase')?.addEventListener('click', () => {
+        vtSearchCase = !vtSearchCase;
+        vtRenderTable();
+      });
+      document.getElementById('vtSearchExact')?.addEventListener('click', () => {
+        vtSearchExact = !vtSearchExact;
+        vtRenderTable();
+      });
+    }
+
+    function vtSwitchPage(idx) {
+      const pages = ticketData?.pages || [];
+      if (idx < 0 || idx >= pages.length) return;
+      vtPageIndex = idx;
+      vtRenderPageNav();
+      vtLoadImage();
+    }
+
+    async function vtLoadImage() {
+      const pages = ticketData?.pages || [];
+      const container = document.getElementById('vtImageContainer');
+      if (!container) return;
+      if (!pages.length) {
+        container.innerHTML = '<p style="padding:40px;color:var(--text-muted);text-align:center;">No images</p>';
+        return;
+      }
+      const page = pages[vtPageIndex];
+      if (!page) return;
+      const filename = page.finalImgList?.[0] || page.oriInputList?.[0];
+      if (!filename) {
+        container.innerHTML = '<p style="padding:40px;color:var(--text-muted);text-align:center;">No image available</p>';
+        return;
+      }
+      const imgUrl = `/tickets/${currentTicket}/images/${filename}`;
+
+      vtProcessorImgSize = null;
+      const procFilename = page.inputList[0];
+      if (procFilename && procFilename !== filename) {
+        const procImg = new Image();
+        procImg.src = `/tickets/${currentTicket}/images/${procFilename}`;
+        procImg.onload = () => {
+          vtProcessorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
+          vtRenderHighlight();
+          vtRenderAreaOverlays();
+        };
+      }
+
+      container.innerHTML = `<img src="${imgUrl}" id="vtPageImg" crossorigin="anonymous" style="${vtZoomMode ? '' : 'width:100%;'}">`;
+      const img = document.getElementById('vtPageImg');
+      img.onload = () => {
+        if (vtZoomMode) vtApplyZoom();
+        else vtRenderHighlight();
+        vtRenderAreaOverlays();
+      };
+    }
+
+    async function vtRenderAreaOverlays() {
+      const container = document.getElementById('vtImageContainer');
+      if (!container) return;
+      container.querySelectorAll('.vt-area-overlay').forEach(el => el.remove());
+      if (!vtShowOcr) return;
+
+      const img = document.getElementById('vtPageImg');
+      if (!img || !img.naturalWidth) return;
+
+      if (!pageAreas[vtPageIndex]) {
+        try {
+          pageAreas[vtPageIndex] = await fetchJSON(`/api/tickets/${currentTicket}/pages/${vtPageIndex}/areas`);
+        } catch { pageAreas[vtPageIndex] = { areaList: [] }; }
+      }
+      const areas = pageAreas[vtPageIndex]?.areaList || [];
+      if (!areas.length) return;
+
+      const refW = vtProcessorImgSize ? vtProcessorImgSize.w : img.naturalWidth;
+      const refH = vtProcessorImgSize ? vtProcessorImgSize.h : img.naturalHeight;
+
+      areas.forEach(area => {
+        let sx, sy, sw, sh;
+        if (vtZoomMode) {
+          sx = area.x * img.naturalWidth / refW;
+          sy = area.y * img.naturalHeight / refH;
+          sw = area.w * img.naturalWidth / refW;
+          sh = area.h * img.naturalHeight / refH;
+        } else {
+          const displayW = img.clientWidth;
+          const displayH = img.clientHeight;
+          sx = area.x * displayW / refW;
+          sy = area.y * displayH / refH;
+          sw = area.w * displayW / refW;
+          sh = area.h * displayH / refH;
+        }
+        const div = document.createElement('div');
+        div.className = 'area-overlay vt-area-overlay';
+        div.style.left = sx + 'px';
+        div.style.top = sy + 'px';
+        div.style.width = sw + 'px';
+        div.style.height = sh + 'px';
+        if (vtShowText && (area.text || '')) {
+          const label = document.createElement('span');
+          label.style.cssText = 'position:absolute;bottom:-18px;left:0;font-size:10px;font-family:Fira Code,monospace;color:#fff;background:rgba(0,0,0,0.75);padding:1px 5px;border-radius:3px;white-space:nowrap;pointer-events:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;line-height:16px;';
+          label.textContent = area.text;
+          div.appendChild(label);
+        }
+        if (area.text) div.dataset.ocrText = area.text;
+        div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
+        div.addEventListener('mouseleave', hideAreaTooltip);
+        container.appendChild(div);
+      });
+    }
+
+    function vtRenderHighlight() {
+      const container = document.getElementById('vtImageContainer');
+      if (!container) return;
+      container.querySelectorAll('.vc-highlight').forEach(el => el.remove());
+      if (!vtActiveHighlight) return;
+
+      const img = document.getElementById('vtPageImg');
+      if (!img || !img.naturalWidth) return;
+
+      const items = vtActiveHighlight.items.filter(it => it.regNdx === vtPageIndex);
+      if (!items.length) return;
+
+      const refW = vtProcessorImgSize ? vtProcessorImgSize.w : img.naturalWidth;
+      const refH = vtProcessorImgSize ? vtProcessorImgSize.h : img.naturalHeight;
+
+      items.forEach(({ x, y, w, h, key, text }) => {
+        let sx, sy, sw, sh;
+        if (vtZoomMode) {
+          sx = x * img.naturalWidth / refW;
+          sy = y * img.naturalHeight / refH;
+          sw = w * img.naturalWidth / refW;
+          sh = h * img.naturalHeight / refH;
+        } else {
+          const displayW = img.clientWidth;
+          const displayH = img.clientHeight;
+          sx = x * displayW / refW;
+          sy = y * displayH / refH;
+          sw = w * displayW / refW;
+          sh = h * displayH / refH;
+        }
+        const div = document.createElement('div');
+        div.className = 'vc-highlight';
+        div.style.left = sx + 'px';
+        div.style.top = sy + 'px';
+        div.style.width = sw + 'px';
+        div.style.height = sh + 'px';
+        container.appendChild(div);
+      });
+
+      const first = container.querySelector('.vc-highlight');
+      if (first) {
+        requestAnimationFrame(() => {
+          first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+      }
+    }
+
+    function vtHighlightItems(items, autoSwitchPage = true) {
+      if (!items.length) return;
+      vtActiveHighlight = { items };
+
+      if (autoSwitchPage) {
+        const hasCurrentPage = items.some(it => it.regNdx === vtPageIndex);
+        if (!hasCurrentPage) {
+          const targetPage = items[0].regNdx;
+          if (targetPage != null && targetPage !== vtPageIndex) {
+            vtPageIndex = targetPage;
+            vtRenderPageNav();
+            vtLoadImage();
+            return;
+          }
+        }
+      }
+      vtRenderHighlight();
+    }
+
+    function vtApplyZoom() {
+      const container = document.getElementById('vtImageContainer');
+      const img = document.getElementById('vtPageImg');
+      const vp = document.getElementById('vtImageViewport');
+      if (!img || !img.naturalWidth) return;
+
+      if (!vtZoomMode) {
+        container.style.width = '';
+        container.style.height = '';
+        img.style.width = '100%';
+        img.style.transform = '';
+        img.style.transformOrigin = '';
+        vtRenderHighlight();
+        vtRenderAreaOverlays();
+        return;
+      }
+
+      vtZoomLevel = 1;
+      const vw = vp.clientWidth;
+      const vh = vp.clientHeight;
+      container.style.width = Math.max(img.naturalWidth, vw) + 'px';
+      container.style.height = Math.max(img.naturalHeight, vh) + 'px';
+      img.style.width = '';
+      img.style.transform = '';
+      img.style.transformOrigin = '';
+      vtRenderHighlight();
+      vtRenderAreaOverlays();
+    }
+
+    function vtRenderTable() {
+      const el = document.getElementById('vtTableContent');
+      if (!el || !ticketData) { if(el) el.innerHTML = ''; return; }
+
+      const areas = ticketData.areas || [];
+      const tables = ticketData.tables || [];
+      const q = vtSearchQuery;
+      let html = '';
+
+      // Fields section (if any)
+      if (areas.length) {
+        html += '<div class="data-section" style="margin:8px;padding:8px;">';
+        html += '<div class="data-section-title">Fields</div>';
+        html += '<div class="data-field-grid">';
+        const filteredAreas = q ? areas.filter(a => {
+          const val = a.text || a.textOCR || '';
+          const label = a.name || a.key || '';
+          return vtSearchMatch(val, q) || vtSearchMatch(label, q);
+        }) : areas;
+        filteredAreas.forEach((a, idx) => {
+          const fi = areas.indexOf(a);
+          const label = a.name || a.key || '';
+          const value = a.text || a.textOCR || '';
+          const hasLoc = a.regNdx != null && !(a.x === 0 && a.y === 0 && a.w === 1 && a.h === 1) && (a.w > 0 && a.h > 0);
+          const locCls = hasLoc && !vtEditMode ? ' locatable' : '';
+          const locAttr = hasLoc && !vtEditMode ? ` data-rx="${a.x}" data-ry="${a.y}" data-rw="${a.w}" data-rh="${a.h}" data-rp="${a.regNdx}" data-rk="${escHtml(label)}" data-rt="${escHtml(value)}"` : '';
+          const editAttr = vtEditMode ? ' contenteditable="true"' : '';
+          html += `<span class="data-field-key">${q ? vtHighlightText(label, q) : escHtml(label)}</span>`;
+          html += `<span class="data-field-val area-value${locCls}" data-fi="${fi}"${locAttr}${editAttr}>${q ? vtHighlightText(value, q) : escHtml(value)}</span>`;
+        });
+        html += '</div></div>';
+      }
+
+      // Table section
+      if (tables.length) {
+        const t = tables[0];
+        const headers = t.headers || [];
+        const allRows = t.rows || [];
+
+        if (vtVisibleColumns === null) {
+          vtVisibleColumns = new Set(headers.map(h => h.key));
+        }
+
+        const rows = q ? allRows.filter(row => {
+          return headers.some(h => {
+            const cell = row[h.key] || {};
+            return vtSearchMatch(cell.text || '', q) || vtSearchMatch(h.name || h.text || h.key, q);
+          });
+        }) : allRows;
+
+        html += '<div style="margin:8px;">';
+        html += `<div class="section-header" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">`;
+        html += `${t.name || 'Table'} <span class="count">${rows.length}${q ? '/' + allRows.length : ''} rows</span>`;
+        html += `<button class="vc-icon-btn${vtEditMode ? ' active' : ''}" id="vtTableEditToggle" title="編輯模式"><img src="${vtEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>`;
+        html += `</div>`;
+
+        // Column toggles
+        html += '<div class="col-toggles">';
+        headers.forEach(h => {
+          html += `<span class="col-toggle ${vtVisibleColumns.has(h.key) ? 'active' : ''}" data-vtcol="${h.key}">${h.name || h.text || h.key}</span>`;
+        });
+        html += '</div>';
+
+        // Table
+        html += '<div class="table-container" style="flex:1;min-height:0;overflow:auto;">';
+        html += '<table><thead><tr>';
+        headers.filter(h => vtVisibleColumns.has(h.key)).forEach(h => {
+          html += `<th title="${h.key}">${h.name || h.text || h.key}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        rows.forEach(row => {
+          const ri = allRows.indexOf(row);
+          html += `<tr data-vtrow="${ri}">`;
+          headers.filter(h => vtVisibleColumns.has(h.key)).forEach((h, ci) => {
+            const cell = row[h.key] || {};
+            const text = cell.text || '';
+            const hasAreaList = cell.areaList && cell.areaList.length > 0;
+            const hasSingleLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
+            const hasLoc = hasAreaList || hasSingleLoc;
+            let cellClass = cell.isFormatError ? 'error-cell' : '';
+            if (hasLoc && !vtEditMode) cellClass += ' locatable';
+
+            let content;
+            if (vtEditMode) {
+              content = escHtml(text);
+            } else {
+              content = q ? vtHighlightText(text, q) : escHtml(text);
+            }
+
+            const editAttr = vtEditMode ? ` contenteditable="true" data-key="${escHtml(h.key)}" data-row="${ri}"` : '';
+            let locAttr = '';
+            if (hasLoc && !vtEditMode) {
+              if (hasAreaList) {
+                locAttr = ` data-arealist='${JSON.stringify(cell.areaList)}'`;
+              } else {
+                locAttr = ` data-rx="${cell.x}" data-ry="${cell.y}" data-rw="${cell.w}" data-rh="${cell.h}" data-rp="${cell.regNdx}"`;
+              }
+            }
+            html += `<td class="${cellClass}"${locAttr}${editAttr}>${content}</td>`;
+          });
+          html += '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+
+        // Edit mode save/revert buttons
+        if (vtEditMode) {
+          html += '<div class="vc-save-bar" style="margin-top:8px;"><button class="vlm-detail-btn btn-green" id="vtSaveAnswer">儲存</button><button class="vlm-detail-btn btn-amber" id="vtRevertEdit2">復原</button></div>';
+        }
+
+        html += '</div>';
+      }
+
+      el.innerHTML = html;
+
+      // Column toggle events
+      el.querySelectorAll('.col-toggle[data-vtcol]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.vtcol;
+          if (vtVisibleColumns.has(key)) vtVisibleColumns.delete(key);
+          else vtVisibleColumns.add(key);
+          vtRenderTable();
+        });
+      });
+
+      // Cell click for image highlight (only in non-edit mode)
+      if (!vtEditMode) {
+        el.querySelectorAll('td.locatable, .area-value.locatable').forEach(td => {
+          td.addEventListener('click', () => {
+            let items = [];
+            if (td.dataset.arealist) {
+              try {
+                const al = JSON.parse(td.dataset.arealist);
+                items = al.map(a => ({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx }));
+              } catch(e) {}
+            } else if (td.dataset.rx) {
+              items = [{ x: parseFloat(td.dataset.rx), y: parseFloat(td.dataset.ry), w: parseFloat(td.dataset.rw), h: parseFloat(td.dataset.rh), regNdx: parseInt(td.dataset.rp) }];
+            }
+            if (items.length) {
+              el.querySelectorAll('tr.row-active').forEach(r => r.classList.remove('row-active'));
+              const tr = td.closest('tr');
+              if (tr) tr.classList.add('row-active');
+              vtHighlightItems(items);
+            }
+          });
+        });
+      }
+
+      // Edit toggle in table header
+      document.getElementById('vtTableEditToggle')?.addEventListener('click', () => {
+        if (vtEditMode) syncVtDomToData();
+        vtEditMode = !vtEditMode;
+        vtRenderPageNav();
+        vtRenderTable();
+      });
+
+      // Save answer
+      document.getElementById('vtSaveAnswer')?.addEventListener('click', async () => {
+        syncVtDomToData();
+        const existingNames = [...(vlmAnswersList || []).map(a => a.name), ...dataAnswersList.map(a => a.name)];
+        const defaultName = deduplicateName(`${currentTicket || 'answer'}_vt`, existingNames);
+        const name = prompt('輸入答案名稱:', defaultName);
+        if (!name) return;
+        const finalName = deduplicateName(name, existingNames);
+
+        const fields = [];
+        (ticketData.areas || []).forEach(a => {
+          fields.push({ key: a.name || a.key || '', value: a.text || '' });
+        });
+        const rows = [];
+        const headers = ticketData.tables?.[0]?.headers || [];
+        (ticketData.tables?.[0]?.rows || []).forEach(row => {
+          const r = {};
+          headers.forEach(h => {
+            const cell = row[h.key];
+            r[h.key] = typeof cell === 'object' ? (cell.text || '') : String(cell || '');
+          });
+          rows.push(r);
+        });
+        const columns = headers.map(h => h.name || h.text || h.key).join(', ');
+
+        try {
+          const res = await fetch(`/api/data-answers/${encodeURIComponent(finalName)}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketId: currentTicket, fields, rows, columns, source: 'visual-table' }),
+          });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+          await loadDataAnswersList();
+          vtEditMode = false;
+          vtRenderPageNav();
+          vtRenderTable();
+          alert(`答案「${finalName}」已儲存`);
+        } catch (e) { alert('儲存失敗: ' + e.message); }
+      });
+
+      // Revert edit
+      document.getElementById('vtRevertEdit2')?.addEventListener('click', () => {
+        vtEditMode = false;
+        vtRenderPageNav();
+        vtRenderTable();
+      });
+
+      // Update row info in nav
+      const tables2 = ticketData?.tables || [];
+      const allRows2 = tables2[0]?.rows || [];
+      const filteredCount2 = q ? el.querySelectorAll('table tbody tr').length : allRows2.length;
+      const rowInfoEl = document.getElementById('vtRowInfo');
+      if (rowInfoEl) {
+        rowInfoEl.textContent = q ? `${filteredCount2}/${allRows2.length} rows` : `${allRows2.length} rows`;
+      }
+    }
+
+    function syncVtDomToData() {
+      if (!ticketData) return;
+      document.querySelectorAll('#vtTableContent td[data-key][data-row]').forEach(td => {
+        const ri = parseInt(td.dataset.row);
+        const key = td.dataset.key;
+        const tables = ticketData.tables || [];
+        if (tables[0]?.rows?.[ri]?.[key]) {
+          tables[0].rows[ri][key].text = td.textContent;
+        }
+      });
+      document.querySelectorAll('#vtTableContent .area-value[contenteditable]').forEach(el => {
+        const fi = parseInt(el.dataset.fi);
+        if (ticketData.areas?.[fi]) {
+          ticketData.areas[fi].text = el.textContent;
+        }
+      });
+    }
+
+    // VT Copy OCR text: delegated click on area overlays
+    document.getElementById('vtImageContainer').addEventListener('click', (e) => {
+      if (!vtCopyOcr) return;
+      const overlay = e.target.closest('.vt-area-overlay');
+      if (!overlay) return;
+      const text = overlay.dataset.ocrText;
+      if (!text) return;
+      e.stopPropagation();
+      e.preventDefault();
+      copyToClipboard(text).then(() => {
+        overlay.style.background = 'rgba(245, 158, 11, 0.4)';
+        setTimeout(() => { overlay.style.background = ''; }, 200);
+      });
+    });
+
+    // VT drag to pan (only in zoom mode)
+    let vtDragging = false, vtDragX = 0, vtDragY = 0, vtScrollX = 0, vtScrollY = 0;
+    document.getElementById('vtImageViewport')?.addEventListener('mousedown', (e) => {
+      if (!vtZoomMode || e.button !== 0) return;
+      vtDragging = true;
+      vtDragX = e.clientX; vtDragY = e.clientY;
+      const vp = document.getElementById('vtImageViewport');
+      vtScrollX = vp.scrollLeft; vtScrollY = vp.scrollTop;
+      vp.classList.add('vc-dragging');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!vtDragging) return;
+      const vp = document.getElementById('vtImageViewport');
+      vp.scrollLeft = vtScrollX - (e.clientX - vtDragX);
+      vp.scrollTop = vtScrollY - (e.clientY - vtDragY);
+    });
+    window.addEventListener('mouseup', () => {
+      if (!vtDragging) return;
+      vtDragging = false;
+      document.getElementById('vtImageViewport')?.classList.remove('vc-dragging');
+    });
+
+    // VT Save bar handlers
+    document.getElementById('vtSaveAsAnswer')?.addEventListener('click', async () => {
+      syncVtDomToData();
+      const existingNames = [...(vlmAnswersList || []).map(a => a.name), ...dataAnswersList.map(a => a.name)];
+      const defaultName = deduplicateName(`${currentTicket || 'answer'}_vt`, existingNames);
+      const name = prompt('輸入答案名稱:', defaultName);
+      if (!name) return;
+      const finalName = deduplicateName(name, existingNames);
+
+      const fields = [];
+      (ticketData.areas || []).forEach(a => {
+        fields.push({ key: a.name || a.key || '', value: a.text || '' });
+      });
+      const rowsData = [];
+      const headers = ticketData.tables?.[0]?.headers || [];
+      (ticketData.tables?.[0]?.rows || []).forEach(row => {
+        const r = {};
+        headers.forEach(h => {
+          const cell = row[h.key];
+          r[h.key] = typeof cell === 'object' ? (cell.text || '') : String(cell || '');
+        });
+        rowsData.push(r);
+      });
+      const columns = headers.map(h => h.name || h.text || h.key).join(', ');
+
+      try {
+        const res = await fetch(`/api/data-answers/${encodeURIComponent(finalName)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticketId: currentTicket, fields, rows: rowsData, columns, source: 'visual-table' }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+        await loadDataAnswersList();
+        vtEditMode = false;
+        document.getElementById('vtSaveBar').style.display = 'none';
+        vtRenderPageNav();
+        vtRenderTable();
+        alert(`答案「${finalName}」已儲存`);
+      } catch (e) { alert('儲存失敗: ' + e.message); }
+    });
+
+    document.getElementById('vtRevertEdit')?.addEventListener('click', () => {
+      vtEditMode = false;
+      document.getElementById('vtSaveBar').style.display = 'none';
+      vtRenderPageNav();
+      vtRenderTable();
     });
 
     // --- Data Management ---
@@ -4873,6 +5597,7 @@
           await loadDataAnswersList();
           renderCheckPanel();
           renderVisualCheck();
+          renderVisualTable();
           renderDataPanel();
           loadPageImage();
         }
