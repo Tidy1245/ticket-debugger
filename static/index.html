@@ -2193,14 +2193,18 @@
       document.getElementById('tableEditToggle')?.addEventListener('click', () => {
         // Sync DOM edits back to ticketData before leaving edit mode
         if (tableEditMode) {
-          document.querySelectorAll('#tableContent td[data-key][data-row]').forEach(td => {
+          const tds = document.querySelectorAll('#tableContent td[data-key][data-row]');
+          let syncCount = 0;
+          tds.forEach(td => {
             const ri = parseInt(td.dataset.row);
             const key = td.dataset.key;
             const tables = ticketData?.tables || [];
             if (tables[0] && tables[0].rows && tables[0].rows[ri] && tables[0].rows[ri][key]) {
               tables[0].rows[ri][key].text = td.textContent;
+              syncCount++;
             }
           });
+          alert(`Sync: found ${tds.length} tds, synced ${syncCount}. Item_No=${ticketData?.tables?.[0]?.rows?.[0]?.Item_No?.text}`);
           document.querySelectorAll('#tableContent .area-item').forEach(el => {
             const key = el.querySelector('.area-label')?.textContent || '';
             const val = el.querySelector('.area-value')?.textContent || '';
