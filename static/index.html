@@ -1406,6 +1406,21 @@
       btn.textContent = sidebarCollapsed ? '▶' : '◀';
       btn.title = sidebarCollapsed ? '展開側邊欄' : '收合側邊欄';
     }
+    function onSidebarTransitionEnd() {
+      // 1. Image tab: recalc fit zoom
+      if (typeof currentViewMode !== 'undefined' && document.getElementById('pageImg')?.naturalWidth) {
+        zoomLevel = calcFitZoom(currentViewMode);
+        applyZoom();
+      }
+      // 2. Visual Check: re-render zoom + highlight for active group
+      if (typeof vcZoomMode !== 'undefined') vcApplyZoom();
+      if (vcActiveHighlight && vcActiveHighlight.items) {
+        vcRenderHighlight();
+      }
+    }
+    document.querySelector('.sidebar').addEventListener('transitionend', (e) => {
+      if (e.propertyName === 'width') onSidebarTransitionEnd();
+    });
     document.getElementById('sidebarToggleBtn').addEventListener('click', () => {
       sidebarCollapsed = !sidebarCollapsed;
       document.querySelector('.sidebar').classList.toggle('collapsed', sidebarCollapsed);
