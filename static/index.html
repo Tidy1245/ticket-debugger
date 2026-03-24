@@ -2137,7 +2137,8 @@
                 <tbody>
           `;
 
-          rows.forEach((row, ri) => {
+          rows.forEach((row) => {
+            const ri = allRows.indexOf(row);
             html += `<tr data-row="${ri}">`;
             headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
               const cell = row[h.key] || {};
@@ -2737,61 +2738,38 @@
           const isListFormat = Array.isArray(rawInteg);
           const integList = isListFormat ? rawInteg : (rawInteg ? [rawInteg] : []);
 
-          // Collect current values: DOM if in edit mode, ticketData if already synced
-          const uiRows = {};  // { rowIdx: { key: text } }
-          if (tableEditMode) {
-            // Read directly from DOM (still editing)
-            document.querySelectorAll('#tableContent td[data-key][data-row]').forEach(td => {
-              const ri = parseInt(td.dataset.row);
-              const key = td.dataset.key;
-              if (!uiRows[ri]) uiRows[ri] = {};
-              uiRows[ri][key] = td.textContent;
-            });
-          } else {
-            // Read from ticketData (already synced on edit mode exit)
-            const tables = ticketData.tables || [];
-            if (tables[0]?.rows) {
-              tables[0].rows.forEach((row, ri) => {
-                uiRows[ri] = {};
-                for (const [key, cell] of Object.entries(row)) {
-                  uiRows[ri][key] = typeof cell === 'object' ? (cell.text || '') : cell;
-                }
-              });
-            }
-          }
-          const uiFields = {};
-          if (tableEditMode) {
-            document.querySelectorAll('#tableContent .area-item').forEach(el => {
-              const key = el.querySelector('.area-label')?.textContent || '';
-              const val = el.querySelector('.area-value')?.textContent || '';
-              if (key) uiFields[key] = val;
-            });
-          } else {
-            (ticketData.areas || []).forEach(a => { if (a.key) uiFields[a.key] = a.text || ''; });
-          }
-
-          // Write values back to config integrator
+          // Always read from ticketData (synced on edit mode exit)
+          // Build lookup: { key: text } for each table row
+          const allTables = ticketData.tables || [];
+          let cfgTableIdx = 0;
           for (const integ of integList) {
-            for (const table of (integ.tableList || [])) {
-              const data = table.data || [];
-              for (let ri = 0; ri < data.length; ri++) {
-                const row = uiRows[ri];
-                if (!row) continue;
-                for (const cell of data[ri]) {
+            for (const cfgTable of (integ.tableList || [])) {
+              const uiTable = allTables[cfgTableIdx];
+              cfgTableIdx++;
+              if (!uiTable?.rows) continue;
+              const cfgData = cfgTable.data || [];
+              for (let ri = 0; ri < cfgData.length; ri++) {
+                const uiRow = uiTable.rows[ri];
+                if (!uiRow) continue;
+                for (const cell of cfgData[ri]) {
                   const key = cell.key || cell.name || '';
-                  if (key && row[key] !== undefined) {
-                    cell.text = row[key];
+                  if (!key) continue;
+                  const uiCell = uiRow[key];
+                  if (uiCell !== undefined) {
+                    cell.text = typeof uiCell === 'object' ? (uiCell.text ?? '') : String(uiCell);
                   }
                 }
               }
             }
-            for (const area of (integ.areaList || [])) {
-              const key = area.key || area.name || '';
-              if (key && uiFields[key] !== undefined) {
-                area.text = uiFields[key];
-              }
+            // Update area fields
+            for (const cfgArea of (integ.areaList || [])) {
+              const key = cfgArea.key || cfgArea.name || '';
+              if (!key) continue;
+              const uiArea = (ticketData.areas || []).find(a => a.key === key);
+              if (uiArea) cfgArea.text = uiArea.text ?? '';
             }
           }
+
 
           // Download
           const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
