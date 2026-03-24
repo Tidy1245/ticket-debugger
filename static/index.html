@@ -3227,6 +3227,21 @@
     }
 
 
+    // Copy text to clipboard (fallback for non-HTTPS)
+    function copyToClipboard(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      return Promise.resolve();
+    }
+
     // VC Copy OCR text: delegated click on area overlays
     document.getElementById('vcImageContainer').addEventListener('click', (e) => {
       if (!vcCopyOcr) return;
@@ -3236,7 +3251,7 @@
       if (!text) return;
       e.stopPropagation();
       e.preventDefault();
-      navigator.clipboard.writeText(text).then(() => {
+      copyToClipboard(text).then(() => {
         overlay.style.background = 'rgba(245, 158, 11, 0.4)';
         setTimeout(() => { overlay.style.background = ''; }, 200);
       });
