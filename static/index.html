@@ -319,7 +319,6 @@
     /* VC Edit Mode */
     .vc-field-value[contenteditable="true"] { border: 1px dashed var(--accent-amber); padding: 2px 4px; border-radius: 3px; outline: none; min-width: 40px; }
     .vc-field-value[contenteditable="true"]:focus { border-color: var(--accent-blue); background: rgba(59, 130, 246, 0.08); }
-    .vc-field-value.qe-selected { border: 2px solid var(--accent-amber) !important; background: rgba(245, 158, 11, 0.12) !important; }
     .vc-icon-btn { width: 26px; height: 26px; padding: 3px; border: 1px solid var(--border); background: transparent; border-radius: 4px; cursor: pointer; transition: all var(--transition); margin-left: 2px; display: flex; align-items: center; justify-content: center; }
     .vc-icon-btn img { width: 18px; height: 18px; }
     .vc-icon-btn:hover { border-color: var(--accent-blue); }
@@ -2612,8 +2611,7 @@
     let vcShowOcr = false;
     let vcShowText = false;
     let vcEditMode = false;
-    let vcQuickEdit = false;
-    let vcQuickEditCell = null; // currently selected cell element for quick edit
+    let vcCopyOcr = false;
     let vcZoomMode = false;
     let vcZoomLevel = 1;
     let vcSearchQuery = '';
@@ -2627,8 +2625,7 @@
       vcActiveHighlight = null;
       vcActiveGroupIdx = -1;
       vcEditMode = false;
-      vcQuickEdit = false;
-      vcQuickEditCell = null;
+      vcCopyOcr = false;
       vcShowOcr = false;
       vcShowText = false;
       vcSearchQuery = '';
@@ -2666,8 +2663,8 @@
         <button class="page-btn" id="vcNext" ${vcPageIndex >= total - 1 ? 'disabled' : ''}>Next</button>
         <input class="page-jump-input" id="vcJump" type="number" min="1" max="${total}" value="${vcPageIndex + 1}">
         <button class="vc-icon-btn${vcEditMode ? ' active' : ''}" id="vcEditToggle" title="編輯模式"><img src="${vcEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>
-        <button class="vc-icon-btn${vcQuickEdit ? ' active' : ''}" id="vcQuickEditToggle" title="快速編輯"><img src="${vcQuickEdit ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
-        <button class="vc-icon-btn${vcShowOcr ? ' active' : ''}${vcQuickEdit ? ' disabled' : ''}" id="vcShowOcrBtn" title="顯示OCR區域"><img src="${vcShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
+        <button class="vc-icon-btn${vcCopyOcr ? ' active' : ''}" id="vcCopyOcrToggle" title="複製OCR文字"><img src="${vcCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
+        <button class="vc-icon-btn${vcShowOcr ? ' active' : ''}" id="vcShowOcrBtn" title="顯示OCR區域"><img src="${vcShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
         <button class="vc-icon-btn${vcShowText ? ' active' : ''}${!vcShowOcr ? ' disabled' : ''}" id="vcShowTextBtn" title="顯示OCR文字"><img src="${vcShowText ? vcIcons.textAmber : vcIcons.textBlue}"></button>
         <button class="vc-icon-btn${vcZoomMode ? ' active' : ''}" id="vcZoomToggle" title="放大檢視"><img src="${vcZoomMode ? vcIcons.zoomAmber : vcIcons.zoomBlue}"></button>
         <button class="vc-icon-btn${vcSegment ? ' active' : ''}" id="vcSegToggle" title="長字分段"><img src="${vcSegment ? vcIcons.segAmber : vcIcons.segBlue}"></button>
@@ -2710,12 +2707,6 @@
       });
       document.getElementById('vcEditToggle').addEventListener('click', () => {
         vcEditMode = !vcEditMode;
-        // If edit mode off, also turn off quick edit
-        if (!vcEditMode && vcQuickEdit) {
-          vcQuickEdit = false;
-          vcQuickEditCell = null;
-          vcShowOcr = false;
-        }
         document.getElementById('vcSaveBar').style.display = vcEditMode ? 'flex' : 'none';
         vcRenderPageNav();
         vcRenderAreaOverlays();
@@ -2725,23 +2716,8 @@
           if (!vcEditMode) el.removeAttribute('contenteditable');
         });
       });
-      document.getElementById('vcQuickEditToggle').addEventListener('click', () => {
-        vcQuickEdit = !vcQuickEdit;
-        vcQuickEditCell = null;
-        if (vcQuickEdit) {
-          // Auto-enable edit mode and OCR areas
-          if (!vcEditMode) {
-            vcEditMode = true;
-            document.getElementById('vcSaveBar').style.display = 'flex';
-            document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => {
-              el.contentEditable = 'true';
-            });
-          }
-          vcShowOcr = true;
-        } else {
-          // Auto-disable OCR areas
-          vcShowOcr = false;
-        }
+      document.getElementById('vcCopyOcrToggle').addEventListener('click', () => {
+        vcCopyOcr = !vcCopyOcr;
         vcRenderPageNav();
         vcRenderAreaOverlays();
       });
@@ -2775,18 +2751,6 @@
         vcRenderTable();
       });
     }
-
-    // Quick Edit: click a cell to select it
-    document.getElementById('vcTableContent').addEventListener('click', (e) => {
-      if (!vcQuickEdit) return;
-      const cell = e.target.closest('.vc-field-value');
-      if (!cell) return;
-      e.stopPropagation();
-      // Deselect previous
-      document.querySelectorAll('#vcTableContent .vc-field-value.qe-selected').forEach(el => el.classList.remove('qe-selected'));
-      cell.classList.add('qe-selected');
-      vcQuickEditCell = cell;
-    });
 
     function vcHighlightText(text, query) {
       if (!query) return escHtml(text);
@@ -2901,21 +2865,18 @@
         }
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
-        // Quick Edit: click area to paste OCR text into selected cell
-        if (vcQuickEdit) {
+        // Copy OCR text mode: click area to copy text to clipboard
+        if (vcCopyOcr) {
           div.style.cursor = 'copy';
           div.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            if (!vcQuickEditCell) return;
             const text = area.text || '';
             if (!text) return;
-            const cell = vcQuickEditCell;
-            const current = cell.textContent;
-            cell.textContent = current ? current + text : text;
-            // Brief flash to confirm paste
-            div.style.background = 'rgba(245, 158, 11, 0.4)';
-            setTimeout(() => { div.style.background = ''; }, 200);
+            navigator.clipboard.writeText(text).then(() => {
+              div.style.background = 'rgba(245, 158, 11, 0.4)';
+              setTimeout(() => { div.style.background = ''; }, 200);
+            });
           });
         }
         container.appendChild(div);
@@ -3344,9 +3305,6 @@
         await loadDataAnswersList();
         // Exit edit mode
         vcEditMode = false;
-        vcQuickEdit = false;
-        vcQuickEditCell = null;
-        vcShowOcr = false;
         document.getElementById('vcSaveBar').style.display = 'none';
         vcRenderPageNav();
         vcRenderAreaOverlays();
