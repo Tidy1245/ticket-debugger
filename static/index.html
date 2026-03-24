@@ -68,41 +68,17 @@
       position: relative;
     }
     .sidebar.collapsed {
-      width: 0;
-      min-width: 0;
+      width: 0 !important;
+      min-width: 0 !important;
       border-right: none;
       overflow: hidden;
     }
-    .sidebar.collapsed > * { opacity: 0; pointer-events: none; }
-    .sidebar-collapse-btn {
-      position: absolute;
-      top: 50%;
-      right: -14px;
-      transform: translateY(-50%);
-      z-index: 20;
-      width: 14px;
-      height: 48px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-left: none;
-      border-radius: 0 6px 6px 0;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-muted);
-      font-size: 12px;
-      transition: all var(--transition);
-      padding: 0;
-    }
-    .sidebar-collapse-btn:hover { color: var(--accent-blue); border-color: var(--accent-blue); }
-    .sidebar-expand-btn {
+    .sidebar-toggle-btn {
       position: fixed;
       top: 50%;
-      left: 0;
       transform: translateY(-50%);
-      z-index: 20;
-      width: 14px;
+      z-index: 100;
+      width: 16px;
       height: 48px;
       background: var(--bg-card);
       border: 1px solid var(--border);
@@ -114,10 +90,10 @@
       justify-content: center;
       color: var(--text-muted);
       font-size: 12px;
-      transition: all var(--transition);
+      transition: left 0.3s ease, color 0.15s;
       padding: 0;
     }
-    .sidebar-expand-btn:hover { color: var(--accent-blue); border-color: var(--accent-blue); }
+    .sidebar-toggle-btn:hover { color: var(--accent-blue); border-color: var(--accent-blue); }
     .sidebar-header {
       padding: 16px 20px;
       border-bottom: 1px solid var(--border);
@@ -1222,9 +1198,8 @@
       <div class="ticket-list" id="ticketList">
         <div class="loading"><div class="spinner"></div>Loading tickets...</div>
       </div>
-      <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="收合側邊欄">◀</button>
     </aside>
-    <button class="sidebar-expand-btn" id="sidebarExpandBtn" style="display:none;" title="展開側邊欄">▶</button>
+    <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="收合/展開側邊欄">◀</button>
 
     <!-- Main -->
     <main class="main" id="mainArea">
@@ -1423,19 +1398,20 @@
     }
 
     // Sidebar collapse/expand
-    function toggleSidebar(collapse) {
-      const sidebar = document.querySelector('.sidebar');
-      const expandBtn = document.getElementById('sidebarExpandBtn');
-      if (collapse) {
-        sidebar.classList.add('collapsed');
-        expandBtn.style.display = '';
-      } else {
-        sidebar.classList.remove('collapsed');
-        expandBtn.style.display = 'none';
-      }
+    let sidebarCollapsed = false;
+    function updateSidebarToggle() {
+      const btn = document.getElementById('sidebarToggleBtn');
+      const left = sidebarCollapsed ? 0 : 340;
+      btn.style.left = left + 'px';
+      btn.textContent = sidebarCollapsed ? '▶' : '◀';
+      btn.title = sidebarCollapsed ? '展開側邊欄' : '收合側邊欄';
     }
-    document.getElementById('sidebarCollapseBtn').addEventListener('click', (e) => { e.stopPropagation(); toggleSidebar(true); });
-    document.getElementById('sidebarExpandBtn').addEventListener('click', () => toggleSidebar(false));
+    document.getElementById('sidebarToggleBtn').addEventListener('click', () => {
+      sidebarCollapsed = !sidebarCollapsed;
+      document.querySelector('.sidebar').classList.toggle('collapsed', sidebarCollapsed);
+      updateSidebarToggle();
+    });
+    updateSidebarToggle();
 
     function goHome() {
       currentTicket = null;
