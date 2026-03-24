@@ -3897,6 +3897,11 @@
       const el = document.getElementById('vtTableContent');
       if (!el || !ticketData) { if(el) el.innerHTML = ''; return; }
 
+      // Save scroll position before re-render
+      const oldWrap = document.getElementById('vtBodyWrap');
+      const savedScrollTop = oldWrap?.scrollTop || 0;
+      const savedScrollLeft = oldWrap?.scrollLeft || 0;
+
       const areas = ticketData.areas || [];
       const tables = ticketData.tables || [];
       const q = vtSearchQuery;
@@ -4000,15 +4005,18 @@
 
         html += '</tbody></table></div>';
 
-        // Edit mode save/revert buttons
-        if (vtEditMode) {
-          html += '<div class="vc-save-bar" style="margin-top:8px;"><button class="vlm-detail-btn btn-green" id="vtSaveAnswer">儲存</button><button class="vlm-detail-btn btn-amber" id="vtRevertEdit2">復原</button></div>';
-        }
 
         html += '</div>';
       }
 
       el.innerHTML = html;
+
+      // Restore scroll position
+      const newWrap = document.getElementById('vtBodyWrap');
+      if (newWrap) {
+        newWrap.scrollTop = savedScrollTop;
+        newWrap.scrollLeft = savedScrollLeft;
+      }
 
       // Column toggle events
       el.querySelectorAll('.col-toggle[data-vtcol]').forEach(btn => {
