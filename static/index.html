@@ -2779,8 +2779,9 @@
     // Quick Edit: click a cell to select it
     document.getElementById('vcTableContent').addEventListener('click', (e) => {
       if (!vcQuickEdit) return;
-      const cell = e.target.closest('.vc-field-value[contenteditable="true"]');
+      const cell = e.target.closest('.vc-field-value');
       if (!cell) return;
+      e.stopPropagation();
       // Deselect previous
       document.querySelectorAll('#vcTableContent .vc-field-value.qe-selected').forEach(el => el.classList.remove('qe-selected'));
       cell.classList.add('qe-selected');
@@ -2901,22 +2902,22 @@
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
         // Quick Edit: click area to paste OCR text into selected cell
-        div.addEventListener('click', (e) => {
-          if (!vcQuickEdit || !vcQuickEditCell) return;
-          e.stopPropagation();
-          const text = area.text || '';
-          if (!text) return;
-          const cell = vcQuickEditCell;
-          const current = cell.textContent;
-          cell.textContent = current ? current + text : text;
-          // Place cursor at end
-          const range = document.createRange();
-          range.selectNodeContents(cell);
-          range.collapse(false);
-          const sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(range);
-        });
+        if (vcQuickEdit) {
+          div.style.cursor = 'copy';
+          div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!vcQuickEditCell) return;
+            const text = area.text || '';
+            if (!text) return;
+            const cell = vcQuickEditCell;
+            const current = cell.textContent;
+            cell.textContent = current ? current + text : text;
+            // Brief flash to confirm paste
+            div.style.background = 'rgba(245, 158, 11, 0.4)';
+            setTimeout(() => { div.style.background = ''; }, 200);
+          });
+        }
         container.appendChild(div);
       });
     }
