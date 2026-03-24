@@ -2605,7 +2605,7 @@
     let vcProcessorImgSize = null;
     let vcActiveHighlight = null;
     let vcActiveGroupIdx = -1;
-    let vcShowOcr = true;
+    let vcShowOcr = false;
     let vcShowText = false;
     let vcEditMode = false;
     let vcZoomMode = false;
@@ -2621,7 +2621,7 @@
       vcActiveHighlight = null;
       vcActiveGroupIdx = -1;
       vcEditMode = false;
-      vcShowOcr = true;
+      vcShowOcr = false;
       vcShowText = false;
       vcSearchQuery = '';
       vcZoomMode = false;
@@ -2851,6 +2851,8 @@
           label.textContent = area.text;
           div.appendChild(label);
         }
+        div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
+        div.addEventListener('mouseleave', hideAreaTooltip);
         container.appendChild(div);
       });
     }
