@@ -126,6 +126,18 @@ async def upload_ticket(request: Request, files: List[UploadFile] = File(...)):
     return {"ticketId": ticket_id, "fileCount": len(saved_files)}
 
 
+@app.get("/api/tickets/{ticket_id}/config")
+async def get_config(request: Request, ticket_id: str):
+    """Get raw config.json for a ticket."""
+    ip = get_ip(request)
+    touch_ip(ip)
+    config_path = ip_dir(ip) / ticket_id / "config.json"
+    if not config_path.exists():
+        raise HTTPException(404, "Ticket not found")
+    with open(config_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 @app.put("/api/tickets/{ticket_id}/config")
 async def update_config(request: Request, ticket_id: str, file: UploadFile = File(...)):
     """Update config.json for a ticket."""
