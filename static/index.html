@@ -2190,6 +2190,25 @@
 
       // Edit toggle
       document.getElementById('tableEditToggle')?.addEventListener('click', () => {
+        // Sync DOM edits back to ticketData before leaving edit mode
+        if (tableEditMode) {
+          document.querySelectorAll('#tableContent td[data-key][data-row]').forEach(td => {
+            const ri = parseInt(td.dataset.row);
+            const key = td.dataset.key;
+            const tables = ticketData?.tables || [];
+            if (tables[0] && tables[0].rows && tables[0].rows[ri] && tables[0].rows[ri][key]) {
+              tables[0].rows[ri][key].text = td.textContent;
+            }
+          });
+          document.querySelectorAll('#tableContent .area-item').forEach(el => {
+            const key = el.querySelector('.area-label')?.textContent || '';
+            const val = el.querySelector('.area-value')?.textContent || '';
+            if (key && ticketData?.areas) {
+              const area = ticketData.areas.find(a => a.key === key);
+              if (area) area.text = val;
+            }
+          });
+        }
         tableEditMode = !tableEditMode;
         renderTable();
       });
@@ -2718,48 +2737,58 @@
           const isListFormat = Array.isArray(rawInteg);
           const integList = isListFormat ? rawInteg : (rawInteg ? [rawInteg] : []);
 
-          // Read current DOM values from Table Data tab
-          const domRows = {};  // { rowIdx: { key: text } }
-          document.querySelectorAll('#tableContent table tbody tr').forEach(tr => {
-            tr.querySelectorAll('td[data-key][data-row]').forEach(td => {
+          // Collect current values: DOM if in edit mode, ticketData if already synced
+          const uiRows = {};  // { rowIdx: { key: text } }
+          if (tableEditMode) {
+            // Read directly from DOM (still editing)
+            document.querySelectorAll('#tableContent td[data-key][data-row]').forEach(td => {
               const ri = parseInt(td.dataset.row);
               const key = td.dataset.key;
-              if (!domRows[ri]) domRows[ri] = {};
-              domRows[ri][key] = td.textContent;
+              if (!uiRows[ri]) uiRows[ri] = {};
+              uiRows[ri][key] = td.textContent;
             });
-          });
-          const domFields = {};  // { key: text }
-          document.querySelectorAll('#tableContent .area-item').forEach(el => {
-            const key = el.querySelector('.area-label')?.textContent || '';
-            const value = el.querySelector('.area-value')?.textContent || '';
-            if (key) domFields[key] = value;
-          });
+          } else {
+            // Read from ticketData (already synced on edit mode exit)
+            const tables = ticketData.tables || [];
+            if (tables[0]?.rows) {
+              tables[0].rows.forEach((row, ri) => {
+                uiRows[ri] = {};
+                for (const [key, cell] of Object.entries(row)) {
+                  uiRows[ri][key] = typeof cell === 'object' ? (cell.text || '') : cell;
+                }
+              });
+            }
+          }
+          const uiFields = {};
+          if (tableEditMode) {
+            document.querySelectorAll('#tableContent .area-item').forEach(el => {
+              const key = el.querySelector('.area-label')?.textContent || '';
+              const val = el.querySelector('.area-value')?.textContent || '';
+              if (key) uiFields[key] = val;
+            });
+          } else {
+            (ticketData.areas || []).forEach(a => { if (a.key) uiFields[a.key] = a.text || ''; });
+          }
 
-          // Write DOM values back to config integrator
-          let tableIdx = 0;
+          // Write values back to config integrator
           for (const integ of integList) {
-            const tl = integ.tableList || [];
-            for (const table of tl) {
+            for (const table of (integ.tableList || [])) {
               const data = table.data || [];
               for (let ri = 0; ri < data.length; ri++) {
-                const dataRow = data[ri];
-                const uiRow = domRows[ri];
-                if (!uiRow) continue;
-                for (const cell of dataRow) {
+                const row = uiRows[ri];
+                if (!row) continue;
+                for (const cell of data[ri]) {
                   const key = cell.key || cell.name || '';
-                  if (key && uiRow[key] !== undefined) {
-                    cell.text = uiRow[key];
+                  if (key && row[key] !== undefined) {
+                    cell.text = row[key];
                   }
                 }
               }
-              tableIdx++;
             }
-            // Update area fields
-            const areas = integ.areaList || [];
-            for (const area of areas) {
+            for (const area of (integ.areaList || [])) {
               const key = area.key || area.name || '';
-              if (key && domFields[key] !== undefined) {
-                area.text = domFields[key];
+              if (key && uiFields[key] !== undefined) {
+                area.text = uiFields[key];
               }
             }
           }
