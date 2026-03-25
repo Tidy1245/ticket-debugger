@@ -2785,7 +2785,7 @@
     let vtSearchExact = false;
     let vtSegment = false;
     let vtVisibleColumns = null;
-    let vtTipMode = 'cell'; // 'cell' or 'group'
+    let vtTipMode = 'group'; // 'cell' or 'group'
     let vtHScroll = false;
 
     function renderVisualCheck() {
@@ -3532,7 +3532,7 @@
       vtZoomLevel = 1;
       vtSearchQuery = '';
       vtVisibleColumns = null;
-      vtTipMode = 'cell';
+      vtTipMode = 'group';
       vtHScroll = false;
       document.getElementById('vtImageViewport')?.classList.remove('vc-zoom-mode');
       document.getElementById('vtSaveBar').style.display = 'none';
@@ -3685,7 +3685,7 @@
       });
       // Cell/Group toggle
       document.getElementById('vtTipCell')?.addEventListener('click', () => {
-        vtTipMode = 'cell';
+        vtTipMode = 'group';
         vtActiveHighlight = null;
         vtRenderHighlight();
         vtRenderPageNav();
@@ -3980,7 +3980,7 @@
             const hasSingleLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
             const hasLoc = hasAreaList || hasSingleLoc;
             let cellClass = cell.isFormatError ? 'error-cell' : '';
-            if (hasLoc && !vtEditMode) cellClass += ' locatable';
+            if (hasLoc && !vtEditMode && vtTipMode === 'cell') cellClass += ' locatable';
 
             let content;
             if (vtEditMode) {
@@ -4028,38 +4028,47 @@
         });
       });
 
-      // Cell click for image highlight (only in non-edit mode)
+      // Cell/Row click for image highlight (only in non-edit mode)
       if (!vtEditMode) {
-        el.querySelectorAll('td.locatable, .area-value.locatable').forEach(td => {
-          td.addEventListener('click', () => {
-            let items = [];
-            if (vtTipMode === 'group') {
-              // Highlight all cells in the row
-              const tr = td.closest('tr');
-              if (tr) {
-                tr.querySelectorAll('td.locatable').forEach(cell => {
-                  if (cell.dataset.arealist) {
-                    try { JSON.parse(cell.dataset.arealist).forEach(a => items.push({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx })); } catch(e) {}
-                  } else if (cell.dataset.rx) {
-                    items.push({ x: +cell.dataset.rx, y: +cell.dataset.ry, w: +cell.dataset.rw, h: +cell.dataset.rh, regNdx: parseInt(cell.dataset.rp) });
-                  }
-                });
+        if (vtTipMode === 'group') {
+          // Group mode: click anywhere on a row to highlight all cells
+          el.querySelectorAll('table tbody tr').forEach(tr => {
+            tr.style.cursor = 'pointer';
+            tr.addEventListener('click', () => {
+              let items = [];
+              tr.querySelectorAll('td').forEach(cell => {
+                if (cell.dataset.arealist) {
+                  try { JSON.parse(cell.dataset.arealist).forEach(a => items.push({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx })); } catch(e) {}
+                } else if (cell.dataset.rx) {
+                  items.push({ x: +cell.dataset.rx, y: +cell.dataset.ry, w: +cell.dataset.rw, h: +cell.dataset.rh, regNdx: parseInt(cell.dataset.rp) });
+                }
+              });
+              if (items.length) {
+                el.querySelectorAll('tr.row-active').forEach(r => r.classList.remove('row-active'));
+                tr.classList.add('row-active');
+                vtHighlightItems(items);
               }
-            } else {
+            });
+          });
+        } else {
+          // Cell mode: click only locatable cells
+          el.querySelectorAll('td.locatable, .area-value.locatable').forEach(td => {
+            td.addEventListener('click', () => {
+              let items = [];
               if (td.dataset.arealist) {
                 try { JSON.parse(td.dataset.arealist).forEach(a => items.push({ x: a.x, y: a.y, w: a.w, h: a.h, regNdx: a.regNdx })); } catch(e) {}
               } else if (td.dataset.rx) {
                 items.push({ x: +td.dataset.rx, y: +td.dataset.ry, w: +td.dataset.rw, h: +td.dataset.rh, regNdx: parseInt(td.dataset.rp) });
               }
-            }
-            if (items.length) {
-              el.querySelectorAll('tr.row-active').forEach(r => r.classList.remove('row-active'));
-              const tr = td.closest('tr');
-              if (tr) tr.classList.add('row-active');
-              vtHighlightItems(items);
-            }
+              if (items.length) {
+                el.querySelectorAll('tr.row-active').forEach(r => r.classList.remove('row-active'));
+                const tr = td.closest('tr');
+                if (tr) tr.classList.add('row-active');
+                vtHighlightItems(items);
+              }
+            });
           });
-        });
+        }
       }
 
       // Edit toggle in table header
