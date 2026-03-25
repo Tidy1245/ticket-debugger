@@ -1358,8 +1358,7 @@
               </div>
             </div>
             <div class="vc-save-bar" id="vcSaveBar" style="display:none;">
-              <button class="vlm-detail-btn btn-green" id="vcSaveAsAnswer">儲存</button>
-              <button class="vlm-detail-btn btn-amber" id="vcRevertEdit">復原</button>
+              <button class="vlm-detail-btn btn-green" id="vcSaveAsAnswer" style="display:none;">儲存</button>
             </div>
           </div>
 
@@ -1378,8 +1377,7 @@
               </div>
             </div>
             <div class="vc-save-bar" id="vtSaveBar" style="display:none;">
-              <button class="vlm-detail-btn btn-green" id="vtSaveAsAnswer">儲存</button>
-              <button class="vlm-detail-btn btn-amber" id="vtRevertEdit">復原</button>
+              <button class="vlm-detail-btn btn-green" id="vtSaveAsAnswer" style="display:none;">儲存</button>
             </div>
           </div>
 
@@ -2019,7 +2017,7 @@
     }
 
     // Image controls
-    let tipMode = 'cell'; // 'cell', 'group', 'all'
+    let tipMode = 'group'; // 'cell', 'group', 'all'
     function updatePillSlider(container, activeBtn) {
       const slider = container.querySelector('.pill-slider');
       if (!slider || !activeBtn) return;
@@ -2381,7 +2379,11 @@
         html += `
           <div class="section-header" style="flex-shrink:0;display:flex;align-items:center;gap:8px;">
             ${t.name || 'Table'} <span class="count">${rowCountLabel}</span>
-            <button class="vc-icon-btn${tableEditMode ? ' active' : ''}" id="tableEditToggle" style="margin-left:8px;" title="編輯模式"><img src="${tableEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>
+            ${tableEditMode
+              ? `<button class="vc-icon-btn active" id="tableEditConfirm" style="margin-left:8px;" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
+                 <button class="vc-icon-btn" id="tableEditCancel" style="margin-left:2px;" title="取消"><img src="${vcIcons.cancelAmber}"></button>
+                 <button class="vc-icon-btn" id="tableSaveAnswer" style="margin-left:2px;" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
+              : `<button class="vc-icon-btn" id="tableEditToggle" style="margin-left:8px;" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
             <button class="vc-icon-btn" id="tableExportCfg" style="margin-left:2px;" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
           </div>
           <div class="col-toggles">
@@ -2444,22 +2446,27 @@
         }
       }
 
-      // Save bar (edit mode)
-      if (tableEditMode) {
-        html += '<div class="vc-save-bar" style="margin-top:8px;"><button class="vlm-detail-btn btn-green" id="tableSaveAnswer">儲存</button><button class="vlm-detail-btn btn-amber" id="tableRevertEdit">復原</button></div>';
-      }
+      // (save bar removed — edit actions are now inline icon buttons)
 
       document.getElementById('tableContent').innerHTML = html;
 
       // Edit toggle
-      document.getElementById('tableEditToggle')?.addEventListener('click', () => {
-        // Sync DOM edits back to ticketData before leaving edit mode
-        if (tableEditMode) {
+      if (tableEditMode) {
+        document.getElementById('tableEditConfirm')?.addEventListener('click', () => {
           syncTableDomToData();
-        }
-        tableEditMode = !tableEditMode;
-        renderTable();
-      });
+          tableEditMode = false;
+          renderTable();
+        });
+        document.getElementById('tableEditCancel')?.addEventListener('click', () => {
+          tableEditMode = false;
+          renderTable();
+        });
+      } else {
+        document.getElementById('tableEditToggle')?.addEventListener('click', () => {
+          tableEditMode = true;
+          renderTable();
+        });
+      }
       document.getElementById('tableExportCfg')?.addEventListener('click', exportConfigJson);
 
       // Save answer (edit mode)
@@ -2504,11 +2511,7 @@
         } catch (e) { alert('儲存失敗: ' + e.message); }
       });
 
-      // Revert edit
-      document.getElementById('tableRevertEdit')?.addEventListener('click', () => {
-        tableEditMode = false;
-        renderTable();
-      });
+      // (revert edit now handled by tableEditCancel inline button)
 
       // Attach search bar listeners (dynamically rendered)
       const searchInput = document.getElementById('tableSearchInput');
@@ -2875,6 +2878,9 @@
       qeAmber: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAHmUlEQVR42uWbW6xdRRnHf2vttelpv7aBgiYmKEYCTamIJZo0hKiNJijGAA8kgOGSCZdwMTxIMD4Qbw8mhsOlF5QI44M8GI1pI4GUgrU1KDcFDA1NSBBj8VKIoRa+09pz9l4+7G/ssNyXtfbZ27MWTjLZ+5y1Z9Z8//nu800CoF5a4rSjXlYC1wOXA+uAFfRaDrwF3CROfxp+b89QL6l9vR+4GmgB4X/DWm6fLwKXAH8GEnHajebNgdOA7cDHgMTGzAMHgF3AFnG6X72kYWzZlkbEbwSeAmaBTwBSWOjJwJ3qZTnQVS9JBF4X2ARca8QnNmZUB1gANgC3i9O8AFxq/7sd+DjQiZ6dAJwO3Ag8rV5uFadd9dKqBIAR/0ngl8BHbUHz9jyxHiZtD5kr7EwajSvTw5zZkLnj9yfRuxasrwbuUS93GD2lQUiM7X8PnGmThR3sAv+MdusQcJs43VFktUgEZoErKopADuwDrgReB7Bdj0XgVODHtkEBgGWRiHatZ8BnxOneopgOA+CrwJ0F4rcA3wfesIkBVJweUy9JWGC/pl5WjdjN/2ri9K0yv1MvJ0XctgK4wNZ+onFtBuwVp5vK6oNEvbwAnGMAtIFt4vSWAQsYOuk4SsjGJfHOV3muXj4H7Iw4YwFYK05fK7OeDFhrAzNDcdZYLy0oHUZNZkooqQrAMI4qiERS0DktcfqEenkGOM/W3zYL9lqkK4YCsNzkLAHeAQ4ZIfmohY1DzGJaYe5cvSQGyoFIFwCsLCjmwVYgMkcUvjeiGSjJAP+CMgAkkRZNy6BWw9Yyce3aZ1YFgCOR2ZoD5saR4yVqYZ1vGA3L7fPvZTkhBa4B/gj8CbhZnB41d7QJ4hCU7neBvcBB4G7g12YBOqVmUS/L1MuyPpq2Uc18kMqDWn08uqYRnkSxSbqoCZrc3gs0LI0WDWJQWmnUc/f/Y9IbosAnTvz4oqBePmtBReNkKVJ+Z6mXi9TL6io0pOrlh8ATwOPq5e6yPnRNiG+J01y9XAA8D+wAfqNeTi4LQmpprOAKO/WyatyobhKsrF5aFUxZWKOzBMmcJU0+ZXpgZGYoiyLBJMoJLIkcF7NMJXILxUCuZRt5Qtn3ZhxPYFL4/j+VY+O69cAZwO/E6etl01oFbkirRoN1kWMHvEAv/f0H9fIFS3Bm03x/usTEJxbQzADfMfE7BqwBdqiXC8XpwjRBWHIOMGW1IspMtU2O28D2aYNQl+Anj5RxLMdVQAhy361ixusU/SV9/h4FQjFJ2jGajjURgHclOiLTPAyEsOsPAkdNlF6yhEgApHEAJMDfgG9GO9xXJ5iVSMTpLuBc4GLgfHH6j0i/jPQD6thWitNvqZc3gW0cT3gGEC4Rp48aCAvmNO0H9kd+RSlfIKOeafGuenmfOL1PvbSBe8qAME44HDzBeY6fDtWlhZ29V73kwL2jQBjXDO6zCTNTIIftxUvODeYet8XpZuDWKLiZmJ+QAhcCW4H7gMtqmBUKCm8qIGTi9ADwlSLydUIg0vqb1QuTFIfUYvDMem0TITEIk+SEzHa7SwPaNDihcQchk+aExojAtEBolAhMQxxS9XKaetmqXrapl1NDPu7/hRNS4BHgZuAm4CdVCw2bDkIKrDdXeAE4G1i9VGnxpQAhZF4y6ws0tI0LQlNrgiYGQtj1gMgM0DY9kFPjqrGolrHfsxmzDhm98l0GWId2BvwF+JCZkBXAF8Xpj9RLu09hYmdEmWxcKT4o25MvNuCKTo0Gme8F44i7LKnyA9vcOL12kTjdmdErM70hSojMqpe/itPHKi4qKUtYlYxNP5AtFfZB4HyGH+VlwGHgOeDTBlhO7+hsu3q5OAPuAq6id7iYAycBO9XLb407wkIPAt+zI6u+53h2Svtle0G/4sVjwEPidFdUCV6F+JD92Qg8DJwyRvgfxGEGeCATp6+ol68Bm00MQtX4eX0m2KBeNsWsFxG/3nyKUX7E5erlHHH6solMpyLxG+w9a8x8h10dJHrJgDV1gQ+EGyNbgG/YD+M02b+sH7W/zwWWF/yEgOo6Gz8XjSv2OZv/rCrBWET8ehPZNQZcyzh3Jvos9mWRmS/2B0NqORWn31YvTwJfN9ma6bOWreL07YIIdAyM3ZZSO3sEPfuA3WXz9havzKuXM+ndD3q/jUsMwEc5XilaRqTCb54F7k+KysW+f4ReGf0qG5ACB8XpnmFKzcpTNkX6JIlemhgX/EqcHo7vANhFiFdN/0Dvgtbp9CrXc/XyYWAPvctTnch5mxWnty3GoiR9zNhYVVZVNHsEWDIEgLXi9E0L0HbTqxuIid8mTm9Z5KFpJyt4Up3IyUgKAA2134GgEd5lXhLgFvC2ejnF2P6MyE3PgAeM+NYo32SkfA1KR4/piuZltfqIdsRk/eemXGPiHxKn1y2GW0cCUIPWNm2/LgI0A34mTq80Dp1IQWQdAcjNzK2JbHwG/MJ8iNTEcSJxSl0zPznvvgv4GHBpcMAmeWqV1ozo2DoF4vfQu1c8T3Sv+L0IQHxSHUL0p4AvidMj0yCeOiRDIpP7JLAxIv4Z4PPi9NC4FzIbwwHmX9xgrnQHeNx2/lB0O30q7d8jy6qqC/sMigAAAABJRU5ErkJggg==',
       cfgBlue: 'data:image/png;base64,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',
       cfgAmber: 'data:image/png;base64,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',
+      confirmGreen: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTBiOTgxIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWxpbmUgcG9pbnRzPSIyMCA2IDkgMTcgNCAxMiIvPjwvc3ZnPg==',
+      cancelAmber: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
+      savePurple: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTc4YmZhIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDIxSDVhMiAyIDAgMDEtMi0yVjVhMiAyIDAgMDEyLTJoMTFsNSA1djExYTIgMiAwIDAxLTIgMnoiLz48cG9seWxpbmUgcG9pbnRzPSIxNyAyMSAxNyAxMyA3IDEzIDcgMjEiLz48cG9seWxpbmUgcG9pbnRzPSI3IDMgNyA4IDE1IDgiLz48L3N2Zz4=',
     };
     let vcPageIndex = 0;
     let vcProcessorImgSize = null;
@@ -2952,7 +2958,11 @@
         <span class="page-indicator" id="vcIndicator" title="Click to jump">${vcPageIndex + 1} / ${total}</span>
         <input class="page-jump-input" id="vcJump" type="number" min="1" max="${total}" value="${vcPageIndex + 1}">
         <button class="page-arrow" id="vcNext" ${vcPageIndex >= total - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg></button>
-        <button class="vc-icon-btn${vcEditMode ? ' active' : ''}" id="vcEditToggle" title="編輯模式"><img src="${vcEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>
+        ${vcEditMode
+          ? `<button class="vc-icon-btn active" id="vcEditConfirm" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
+             <button class="vc-icon-btn" id="vcEditCancel" title="取消"><img src="${vcIcons.cancelAmber}"></button>
+             <button class="vc-icon-btn" id="vcEditSave" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
+          : `<button class="vc-icon-btn" id="vcEditToggle" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
         <button class="vc-icon-btn${vcCopyOcr ? ' active' : ''}" id="vcCopyOcrToggle" title="複製OCR文字"><img src="${vcCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
         <button class="vc-icon-btn${vcShowOcr ? ' active' : ''}${vcCopyOcr ? ' disabled' : ''}" id="vcShowOcrBtn" title="顯示OCR區域"><img src="${vcShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
         <button class="vc-icon-btn${vcShowText ? ' active' : ''}${!vcShowOcr ? ' disabled' : ''}" id="vcShowTextBtn" title="顯示OCR文字"><img src="${vcShowText ? vcIcons.textAmber : vcIcons.textBlue}"></button>
@@ -3006,18 +3016,33 @@
         vcRenderTable();
       });
       document.getElementById('vcExportCfg').addEventListener('click', exportConfigJson);
-      document.getElementById('vcEditToggle').addEventListener('click', () => {
-        // Sync VC edits before leaving edit mode
-        if (vcEditMode) syncVcDomToData();
-        vcEditMode = !vcEditMode;
-        document.getElementById('vcSaveBar').style.display = vcEditMode ? 'flex' : 'none';
-        vcRenderPageNav();
-        vcRenderAreaOverlays();
-        document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => {
-          el.contentEditable = vcEditMode ? 'true' : 'false';
-          if (!vcEditMode) el.removeAttribute('contenteditable');
+      if (vcEditMode) {
+        // Edit mode active: confirm / cancel / save-as-answer
+        document.getElementById('vcEditConfirm').addEventListener('click', () => {
+          syncVcDomToData();
+          vcEditMode = false;
+          vcRenderPageNav();
+          vcRenderAreaOverlays();
+          document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => el.removeAttribute('contenteditable'));
         });
-      });
+        document.getElementById('vcEditCancel').addEventListener('click', () => {
+          vcEditMode = false;
+          vcRenderPageNav();
+          vcRenderTable();
+        });
+        document.getElementById('vcEditSave').addEventListener('click', () => {
+          document.getElementById('vcSaveAsAnswer')?.click();
+        });
+      } else {
+        document.getElementById('vcEditToggle').addEventListener('click', () => {
+          vcEditMode = true;
+          vcRenderPageNav();
+          vcRenderAreaOverlays();
+          document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => {
+            el.contentEditable = 'true';
+          });
+        });
+      }
       document.getElementById('vcCopyOcrToggle').addEventListener('click', () => {
         vcCopyOcr = !vcCopyOcr;
         if (vcCopyOcr) {
@@ -3724,7 +3749,11 @@
         <span class="page-indicator" id="vtIndicator" title="Click to jump">${vtPageIndex + 1} / ${total}</span>
         <input class="page-jump-input" id="vtJump" type="number" min="1" max="${total}" value="${vtPageIndex + 1}">
         <button class="page-arrow" id="vtNext" ${vtPageIndex >= total - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg></button>
-        <button class="vc-icon-btn${vtEditMode ? ' active' : ''}" id="vtEditToggle" title="編輯模式"><img src="${vtEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>
+        ${vtEditMode
+          ? `<button class="vc-icon-btn active" id="vtEditConfirm" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
+             <button class="vc-icon-btn" id="vtEditCancel" title="取消"><img src="${vcIcons.cancelAmber}"></button>
+             <button class="vc-icon-btn" id="vtEditSave" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
+          : `<button class="vc-icon-btn" id="vtEditToggle" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
         <button class="vc-icon-btn${vtCopyOcr ? ' active' : ''}" id="vtCopyOcrToggle" title="複製OCR文字"><img src="${vtCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
         <button class="vc-icon-btn${vtShowOcr ? ' active' : ''}${vtCopyOcr ? ' disabled' : ''}" id="vtShowOcrBtn" title="顯示OCR區域"><img src="${vtShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
         <button class="vc-icon-btn${vtShowText ? ' active' : ''}${!vtShowOcr ? ' disabled' : ''}" id="vtShowTextBtn" title="顯示OCR文字"><img src="${vtShowText ? vcIcons.textAmber : vcIcons.textBlue}"></button>
@@ -3777,14 +3806,30 @@
         vtApplyZoom();
       });
       document.getElementById('vtExportCfg').addEventListener('click', exportConfigJson);
-      document.getElementById('vtEditToggle').addEventListener('click', () => {
-        if (vtEditMode) syncVtDomToData();
-        vtEditMode = !vtEditMode;
-        document.getElementById('vtSaveBar').style.display = vtEditMode ? 'flex' : 'none';
-        vtRenderPageNav();
-        vtRenderTable();
-        vtRenderAreaOverlays();
-      });
+      if (vtEditMode) {
+        document.getElementById('vtEditConfirm')?.addEventListener('click', () => {
+          syncVtDomToData();
+          vtEditMode = false;
+          vtRenderPageNav();
+          vtRenderTable();
+          vtRenderAreaOverlays();
+        });
+        document.getElementById('vtEditCancel')?.addEventListener('click', () => {
+          vtEditMode = false;
+          vtRenderPageNav();
+          vtRenderTable();
+        });
+        document.getElementById('vtEditSave')?.addEventListener('click', () => {
+          document.getElementById('vtSaveAsAnswer')?.click();
+        });
+      } else {
+        document.getElementById('vtEditToggle')?.addEventListener('click', () => {
+          vtEditMode = true;
+          vtRenderPageNav();
+          vtRenderTable();
+          vtRenderAreaOverlays();
+        });
+      }
       document.getElementById('vtCopyOcrToggle').addEventListener('click', () => {
         vtCopyOcr = !vtCopyOcr;
         if (vtCopyOcr) {
