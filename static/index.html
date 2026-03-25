@@ -272,12 +272,13 @@
     .vc-image-container img { width: 100%; display: block; }
     .vc-table-side { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
     .vc-table-content { flex: 1; overflow-y: auto; padding: 12px 16px; }
-    .vc-page-nav { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .vc-page-nav .page-btn { padding: 4px 12px; font-size: 12px; font-family: 'Fira Code', monospace; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; cursor: pointer; transition: all var(--transition); }
-    .vc-page-nav .page-btn:hover:not(:disabled) { border-color: var(--accent-blue); color: var(--accent-blue); }
-    .vc-page-nav .page-btn:disabled { opacity: 0.4; cursor: default; }
-    .vc-page-nav .page-info { font-size: 12px; font-family: 'Fira Code', monospace; color: var(--text-secondary); }
-    .vc-page-nav .page-jump-input { width: 48px; padding: 3px 6px; font-size: 12px; font-family: 'Fira Code', monospace; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); border-radius: 4px; text-align: center; }
+    .vc-page-nav { display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .vc-page-nav .page-arrow { width: 26px; height: 26px; font-size: 13px; }
+    .vc-page-nav .page-arrow svg { width: 13px; height: 13px; }
+    .vc-page-nav .page-indicator { font-size: 12px; padding: 3px 12px; }
+    .vc-page-nav .page-jump-input { width: 48px; padding: 3px 6px; font-size: 12px; font-family: 'Fira Code', monospace; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); border-radius: 14px; text-align: center; display: none; }
+    .vc-page-nav .page-indicator.editing { display: none; }
+    .vc-page-nav .page-jump-input.visible { display: block; }
     .vc-group-count { font-size: 11px; font-family: 'Fira Code', monospace; color: var(--text-muted); margin-left: auto; }
     .vc-highlight { position: absolute; border: 2.5px solid #f59e0b; background: rgba(245, 158, 11, 0.18); z-index: 20; pointer-events: none; border-radius: 2px; animation: cell-pulse 1.5s ease-in-out 3; }
     .vc-highlight-label { position: absolute; top: -22px; left: 0; font-size: 11px; font-family: 'Fira Code', monospace; color: #fff; background: rgba(245, 158, 11, 0.9); padding: 2px 8px; border-radius: 3px; white-space: nowrap; pointer-events: none; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
@@ -359,14 +360,12 @@
     .tag-item .tag-remove:hover { opacity: 1; }
     .tag-selector select { border: none; background: transparent; color: var(--text-muted); font-size: 11px; font-family: 'Fira Code', monospace; outline: none; cursor: pointer; padding: 0; flex-shrink: 0; }
 
-    /* Table-Image Position mode selector */
-    .tip-mode { display: flex; align-items: center; gap: 2px; }
-    .tip-btn { padding: 3px 8px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 11px; font-family: 'Fira Code', monospace; cursor: pointer; transition: all var(--transition); }
-    .tip-btn:first-of-type { border-radius: 4px 0 0 4px; }
-    .tip-btn:last-of-type { border-radius: 0 4px 4px 0; }
-    .tip-btn:not(:first-of-type) { border-left: none; }
-    .tip-btn:hover { color: var(--text-secondary); }
-    .tip-btn.active { background: rgba(245, 158, 11, 0.15); border-color: var(--accent-amber); color: var(--accent-amber); }
+    /* Pill toggle selector (Position mode, Cell/Group) */
+    .pill-toggle { display: flex; align-items: center; position: relative; background: var(--bg-input); border: 1px solid var(--border); border-radius: 20px; padding: 2px; gap: 0; }
+    .pill-toggle .pill-slider { position: absolute; top: 2px; bottom: 2px; border-radius: 16px; background: var(--accent-amber); transition: left 0.25s cubic-bezier(.4,0,.2,1), width 0.25s cubic-bezier(.4,0,.2,1); pointer-events: none; z-index: 0; }
+    .pill-toggle .pill-opt { position: relative; z-index: 1; padding: 3px 10px; border: none; background: transparent; color: var(--text-muted); font-size: 11px; font-family: 'Fira Code', monospace; cursor: pointer; transition: color 0.2s; border-radius: 16px; white-space: nowrap; }
+    .pill-toggle .pill-opt:hover { color: var(--text-secondary); }
+    .pill-toggle .pill-opt.active { color: #000; font-weight: 600; }
     .row-active td { background: rgba(245, 158, 11, 0.10) !important; }
 
     /* Main content */
@@ -796,34 +795,45 @@
     .page-nav {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       margin-bottom: 12px;
       flex-shrink: 0;
     }
-    .page-btn {
-      font-family: 'Fira Code', monospace;
-      font-size: 12px;
-      padding: 6px 14px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      color: var(--text-secondary);
+    .page-arrow {
+      display: flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent-blue);
+      color: #fff;
+      font-size: 14px;
       cursor: pointer;
-      transition: all var(--transition);
+      transition: all 0.2s;
+      flex-shrink: 0;
     }
-    .page-btn:hover { border-color: var(--accent-blue-dim); color: var(--text-primary); }
-    .page-btn:disabled { opacity: 0.3; cursor: default; }
-    .page-info {
+    .page-arrow:hover:not(:disabled) { background: #60a5fa; }
+    .page-arrow:disabled { opacity: 0.25; cursor: default; }
+    .page-arrow svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    .page-indicator {
       font-family: 'Fira Code', monospace;
       font-size: 13px;
       color: var(--text-secondary);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 4px 14px;
+      letter-spacing: 0.5px;
+      user-select: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
     }
+    .page-indicator:hover { border-color: var(--accent-blue); }
     .page-jump-input {
       font-family: 'Fira Code', monospace;
       font-size: 12px;
       width: 50px;
       padding: 5px 8px;
-      border-radius: var(--radius-sm);
+      border-radius: 14px;
       border: 1px solid var(--border);
       background: var(--bg-input);
       color: var(--text-primary);
@@ -1287,12 +1297,15 @@
               <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
                 <input type="checkbox" id="showOcrTexts"> Show OCR Texts
               </label>
-              <div class="tip-mode" id="tipMode">
-                <span style="font-size:12px;color:var(--text-muted);margin-right:4px;">Position:</span>
-                <button class="tip-btn active" data-mode="off">Off</button>
-                <button class="tip-btn" data-mode="cell">Cell</button>
-                <button class="tip-btn" data-mode="group">Group</button>
-                <button class="tip-btn" data-mode="all">All</button>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:12px;color:var(--text-muted);">Position:</span>
+                <div class="pill-toggle" id="tipMode">
+                  <div class="pill-slider" id="tipSlider"></div>
+                  <button class="pill-opt active" data-mode="off">Off</button>
+                  <button class="pill-opt" data-mode="cell">Cell</button>
+                  <button class="pill-opt" data-mode="group">Group</button>
+                  <button class="pill-opt" data-mode="all">All</button>
+                </div>
               </div>
               <div style="flex:1;"></div>
               <div class="search-bar">
@@ -1643,19 +1656,32 @@
       const pages = ticketData.pages || [];
       const total = pages.length;
       const cur = currentPageIndex;
+      const arrowLeft = `<svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>`;
+      const arrowRight = `<svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg>`;
       document.getElementById('pageNav').innerHTML = `
-        <button class="page-btn" onclick="switchPage(${cur - 1})" ${cur <= 0 ? 'disabled' : ''}>Prev</button>
-        <span class="page-info">Page ${cur + 1} / ${total}</span>
-        <button class="page-btn" onclick="switchPage(${cur + 1})" ${cur >= total - 1 ? 'disabled' : ''}>Next</button>
-        <input class="page-jump-input" id="pageJumpInput" type="number" min="1" max="${total}" value="${cur + 1}" title="Jump to page">
+        <button class="page-arrow" id="pagePrevBtn" ${cur <= 0 ? 'disabled' : ''}>${arrowLeft}</button>
+        <span class="page-indicator" id="pageIndicator" title="Click to jump">${cur + 1} / ${total}</span>
+        <input class="page-jump-input" id="pageJumpInput" type="number" min="1" max="${total}" value="${cur + 1}" style="display:none;">
+        <button class="page-arrow" id="pageNextBtn" ${cur >= total - 1 ? 'disabled' : ''}>${arrowRight}</button>
         <span class="zoom-info" id="zoomInfo"></span>
       `;
+      document.getElementById('pagePrevBtn').onclick = () => switchPage(cur - 1);
+      document.getElementById('pageNextBtn').onclick = () => switchPage(cur + 1);
+      document.getElementById('pageIndicator').addEventListener('click', () => {
+        document.getElementById('pageIndicator').style.display = 'none';
+        const inp = document.getElementById('pageJumpInput');
+        inp.style.display = 'block';
+        inp.focus();
+        inp.select();
+      });
       document.getElementById('pageJumpInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           const val = parseInt(e.target.value, 10);
           if (val >= 1 && val <= total) switchPage(val - 1);
         }
+        if (e.key === 'Escape') renderPageNav();
       });
+      document.getElementById('pageJumpInput').addEventListener('blur', () => renderPageNav());
       updateZoomInfo();
     }
 
@@ -1869,10 +1895,23 @@
     document.getElementById('showAreas').addEventListener('change', () => renderAreaOverlays());
     document.getElementById('showOcrTexts').addEventListener('change', () => renderAreaOverlays());
     let tipMode = 'off'; // 'off', 'cell', 'group', 'all'
-    document.querySelectorAll('.tip-btn').forEach(btn => {
+    function updatePillSlider(container, activeBtn) {
+      const slider = container.querySelector('.pill-slider');
+      if (!slider || !activeBtn) return;
+      slider.style.left = activeBtn.offsetLeft + 'px';
+      slider.style.width = activeBtn.offsetWidth + 'px';
+    }
+    // Init slider position after DOM ready
+    requestAnimationFrame(() => {
+      const tipEl = document.getElementById('tipMode');
+      const activeBtn = tipEl?.querySelector('.pill-opt.active');
+      if (tipEl && activeBtn) updatePillSlider(tipEl, activeBtn);
+    });
+    document.querySelectorAll('#tipMode .pill-opt').forEach(btn => {
       btn.addEventListener('click', () => {
         tipMode = btn.dataset.mode;
-        document.querySelectorAll('.tip-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === tipMode));
+        document.querySelectorAll('#tipMode .pill-opt').forEach(b => b.classList.toggle('active', b.dataset.mode === tipMode));
+        updatePillSlider(document.getElementById('tipMode'), btn);
         const container = document.getElementById('imageContainer');
         if (container) container.querySelectorAll('.cell-highlight').forEach(el => el.remove());
         if (tipMode === 'all') {
@@ -2448,7 +2487,7 @@
           if (tipMode === 'off' || tipMode === 'all') {
             // Auto-switch to cell mode
             tipMode = 'cell';
-            document.querySelectorAll('.tip-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell'));
+            document.querySelectorAll('#tipMode .pill-opt').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell')); updatePillSlider(document.getElementById('tipMode'), document.querySelector('#tipMode .pill-opt[data-mode="cell"]'));
           }
 
           if (tipMode === 'group' && el.tagName === 'TD') {
@@ -2484,7 +2523,7 @@
       // Auto-enable position mode
       if (tipMode === 'off' || tipMode === 'all') {
         tipMode = 'cell';
-        document.querySelectorAll('.tip-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell'));
+        document.querySelectorAll('#tipMode .pill-opt').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell')); updatePillSlider(document.getElementById('tipMode'), document.querySelector('#tipMode .pill-opt[data-mode="cell"]'));
       }
 
       // Clear OCR search to avoid conflicts
@@ -2526,7 +2565,7 @@
 
       if (tipMode === 'off' || tipMode === 'all') {
         tipMode = 'cell';
-        document.querySelectorAll('.tip-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell'));
+        document.querySelectorAll('#tipMode .pill-opt').forEach(b => b.classList.toggle('active', b.dataset.mode === 'cell')); updatePillSlider(document.getElementById('tipMode'), document.querySelector('#tipMode .pill-opt[data-mode="cell"]'));
       }
 
       const ocrInput = document.getElementById('ocrSearchInput');
@@ -2827,10 +2866,10 @@
         }
       });
       nav.innerHTML = `
-        <button class="page-btn" id="vcPrev" ${vcPageIndex <= 0 ? 'disabled' : ''}>Prev</button>
-        <span class="page-info">Page ${vcPageIndex + 1} / ${total}</span>
-        <button class="page-btn" id="vcNext" ${vcPageIndex >= total - 1 ? 'disabled' : ''}>Next</button>
+        <button class="page-arrow" id="vcPrev" ${vcPageIndex <= 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <span class="page-indicator" id="vcIndicator" title="Click to jump">${vcPageIndex + 1} / ${total}</span>
         <input class="page-jump-input" id="vcJump" type="number" min="1" max="${total}" value="${vcPageIndex + 1}">
+        <button class="page-arrow" id="vcNext" ${vcPageIndex >= total - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg></button>
         <button class="vc-icon-btn${vcEditMode ? ' active' : ''}" id="vcEditToggle" title="編輯模式"><img src="${vcEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>
         <button class="vc-icon-btn${vcCopyOcr ? ' active' : ''}" id="vcCopyOcrToggle" title="複製OCR文字"><img src="${vcCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
         <button class="vc-icon-btn${vcShowOcr ? ' active' : ''}${vcCopyOcr ? ' disabled' : ''}" id="vcShowOcrBtn" title="顯示OCR區域"><img src="${vcShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
@@ -2850,9 +2889,18 @@
       `;
       document.getElementById('vcPrev').onclick = () => vcSwitchPage(vcPageIndex - 1);
       document.getElementById('vcNext').onclick = () => vcSwitchPage(vcPageIndex + 1);
+      document.getElementById('vcIndicator').addEventListener('click', () => {
+        document.getElementById('vcIndicator').style.display = 'none';
+        const inp = document.getElementById('vcJump');
+        inp.classList.add('visible');
+        inp.focus();
+        inp.select();
+      });
       document.getElementById('vcJump').addEventListener('keydown', e => {
         if (e.key === 'Enter') vcSwitchPage(parseInt(e.target.value) - 1);
+        if (e.key === 'Escape') vcRenderPageNav();
       });
+      document.getElementById('vcJump').addEventListener('blur', () => vcRenderPageNav());
       document.getElementById('vcShowOcrBtn').addEventListener('click', () => {
         vcShowOcr = !vcShowOcr;
         vcRenderPageNav();
@@ -3588,19 +3636,20 @@
       const rowInfo = q ? `${filteredCount}/${allRows.length} rows` : `${allRows.length} rows`;
 
       nav.innerHTML = `
-        <button class="page-btn" id="vtPrev" ${vtPageIndex <= 0 ? 'disabled' : ''}>Prev</button>
-        <span class="page-info">Page ${vtPageIndex + 1} / ${total}</span>
-        <button class="page-btn" id="vtNext" ${vtPageIndex >= total - 1 ? 'disabled' : ''}>Next</button>
+        <button class="page-arrow" id="vtPrev" ${vtPageIndex <= 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <span class="page-indicator" id="vtIndicator" title="Click to jump">${vtPageIndex + 1} / ${total}</span>
         <input class="page-jump-input" id="vtJump" type="number" min="1" max="${total}" value="${vtPageIndex + 1}">
+        <button class="page-arrow" id="vtNext" ${vtPageIndex >= total - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg></button>
         <button class="vc-icon-btn${vtEditMode ? ' active' : ''}" id="vtEditToggle" title="編輯模式"><img src="${vtEditMode ? vcIcons.editAmber : vcIcons.editBlue}"></button>
         <button class="vc-icon-btn${vtCopyOcr ? ' active' : ''}" id="vtCopyOcrToggle" title="複製OCR文字"><img src="${vtCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
         <button class="vc-icon-btn${vtShowOcr ? ' active' : ''}${vtCopyOcr ? ' disabled' : ''}" id="vtShowOcrBtn" title="顯示OCR區域"><img src="${vtShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
         <button class="vc-icon-btn${vtShowText ? ' active' : ''}${!vtShowOcr ? ' disabled' : ''}" id="vtShowTextBtn" title="顯示OCR文字"><img src="${vtShowText ? vcIcons.textAmber : vcIcons.textBlue}"></button>
         <button class="vc-icon-btn${vtZoomMode ? ' active' : ''}" id="vtZoomToggle" title="放大檢視"><img src="${vtZoomMode ? vcIcons.zoomAmber : vcIcons.zoomBlue}"></button>
         <button class="vc-icon-btn" id="vtExportCfg" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
-        <div class="tip-mode" style="margin-left:4px;">
-          <button class="tip-btn${vtTipMode === 'cell' ? ' active' : ''}" id="vtTipCell">Cell</button>
-          <button class="tip-btn${vtTipMode === 'group' ? ' active' : ''}" id="vtTipGroup">Group</button>
+        <div class="pill-toggle" id="vtTipToggle" style="margin-left:4px;">
+          <div class="pill-slider" id="vtTipSlider"></div>
+          <button class="pill-opt${vtTipMode === 'cell' ? ' active' : ''}" id="vtTipCell">Cell</button>
+          <button class="pill-opt${vtTipMode === 'group' ? ' active' : ''}" id="vtTipGroup">Group</button>
         </div>
         <div class="search-bar vc-search-bar">
           <span class="vc-group-info" id="vtRowInfo">${rowInfo}</span>
@@ -3614,9 +3663,18 @@
       `;
       document.getElementById('vtPrev').onclick = () => vtSwitchPage(vtPageIndex - 1);
       document.getElementById('vtNext').onclick = () => vtSwitchPage(vtPageIndex + 1);
+      document.getElementById('vtIndicator').addEventListener('click', () => {
+        document.getElementById('vtIndicator').style.display = 'none';
+        const inp = document.getElementById('vtJump');
+        inp.classList.add('visible');
+        inp.focus();
+        inp.select();
+      });
       document.getElementById('vtJump').addEventListener('keydown', e => {
         if (e.key === 'Enter') vtSwitchPage(parseInt(e.target.value) - 1);
+        if (e.key === 'Escape') vtRenderPageNav();
       });
+      document.getElementById('vtJump').addEventListener('blur', () => vtRenderPageNav());
       document.getElementById('vtShowOcrBtn').addEventListener('click', () => {
         vtShowOcr = !vtShowOcr;
         vtRenderPageNav();
@@ -3683,7 +3741,12 @@
         vtSearchExact = !vtSearchExact;
         vtRenderTable();
       });
-      // Cell/Group toggle
+      // Cell/Group toggle - init slider position
+      requestAnimationFrame(() => {
+        const vtToggle = document.getElementById('vtTipToggle');
+        const vtActive = vtToggle?.querySelector('.pill-opt.active');
+        if (vtToggle && vtActive) updatePillSlider(vtToggle, vtActive);
+      });
       document.getElementById('vtTipCell')?.addEventListener('click', () => {
         vtTipMode = 'cell';
         vtActiveHighlight = null;
