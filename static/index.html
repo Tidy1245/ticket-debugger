@@ -2381,7 +2381,7 @@
             ${t.name || 'Table'} <span class="count">${rowCountLabel}</span>
             ${tableEditMode
               ? `<button class="vc-icon-btn active" id="tableEditConfirm" style="margin-left:8px;" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
-                 <button class="vc-icon-btn" id="tableEditCancel" style="margin-left:2px;" title="取消"><img src="${vcIcons.cancelAmber}"></button>
+                 <button class="vc-icon-btn" id="tableEditCancel" style="margin-left:2px;" title="取消編輯"><img src="${vcIcons.cancelRed}"></button>
                  <button class="vc-icon-btn" id="tableSaveAnswer" style="margin-left:2px;" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
               : `<button class="vc-icon-btn" id="tableEditToggle" style="margin-left:8px;" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
             <button class="vc-icon-btn" id="tableExportCfg" style="margin-left:2px;" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
@@ -2487,15 +2487,18 @@
 
         // Collect rows from table cells
         const rows = [];
+        const headers = ticketData.tables?.[0]?.headers || [];
+        const keyToName = {};
+        headers.forEach(h => { keyToName[h.key] = h.name || h.text || h.key; });
         document.querySelectorAll('#tableContent table tbody tr').forEach(tr => {
           const row = {};
           tr.querySelectorAll('td[data-key]').forEach(td => {
-            row[td.dataset.key] = td.textContent;
+            const displayName = keyToName[td.dataset.key] || td.dataset.key;
+            row[displayName] = td.textContent;
           });
           if (Object.keys(row).length) rows.push(row);
         });
 
-        const headers = ticketData.tables?.[0]?.headers || [];
         const columns = headers.map(h => h.name || h.text || h.key).join(', ');
 
         try {
@@ -2880,6 +2883,7 @@
       cfgAmber: 'data:image/png;base64,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',
       confirmGreen: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTBiOTgxIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWxpbmUgcG9pbnRzPSIyMCA2IDkgMTcgNCAxMiIvPjwvc3ZnPg==',
       cancelAmber: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
+      cancelRed: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZWY0NDQ0IiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
       savePurple: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTc4YmZhIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDIxSDVhMiAyIDAgMDEtMi0yVjVhMiAyIDAgMDEyLTJoMTFsNSA1djExYTIgMiAwIDAxLTIgMnoiLz48cG9seWxpbmUgcG9pbnRzPSIxNyAyMSAxNyAxMyA3IDEzIDcgMjEiLz48cG9seWxpbmUgcG9pbnRzPSI3IDMgNyA4IDE1IDgiLz48L3N2Zz4=',
     };
     let vcPageIndex = 0;
@@ -2960,7 +2964,7 @@
         <button class="page-arrow" id="vcNext" ${vcPageIndex >= total - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg></button>
         ${vcEditMode
           ? `<button class="vc-icon-btn active" id="vcEditConfirm" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
-             <button class="vc-icon-btn" id="vcEditCancel" title="取消"><img src="${vcIcons.cancelAmber}"></button>
+             <button class="vc-icon-btn" id="vcEditCancel" title="取消編輯"><img src="${vcIcons.cancelRed}"></button>
              <button class="vc-icon-btn" id="vcEditSave" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
           : `<button class="vc-icon-btn" id="vcEditToggle" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
         <button class="vc-icon-btn${vcCopyOcr ? ' active' : ''}" id="vcCopyOcrToggle" title="複製OCR文字"><img src="${vcCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
@@ -3751,7 +3755,7 @@
         <button class="page-arrow" id="vtNext" ${vtPageIndex >= total - 1 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg></button>
         ${vtEditMode
           ? `<button class="vc-icon-btn active" id="vtEditConfirm" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
-             <button class="vc-icon-btn" id="vtEditCancel" title="取消"><img src="${vcIcons.cancelAmber}"></button>
+             <button class="vc-icon-btn" id="vtEditCancel" title="取消編輯"><img src="${vcIcons.cancelRed}"></button>
              <button class="vc-icon-btn" id="vtEditSave" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
           : `<button class="vc-icon-btn" id="vtEditToggle" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
         <button class="vc-icon-btn${vtCopyOcr ? ' active' : ''}" id="vtCopyOcrToggle" title="複製OCR文字"><img src="${vtCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
@@ -4103,8 +4107,8 @@
       const q = vtSearchQuery;
       let html = '';
 
-      // Fields section (if any)
-      if (areas.length) {
+      // Fields section (only if no tables — VT focuses on table view)
+      if (areas.length && !tables.length) {
         html += '<div class="data-section" style="margin:8px;padding:8px;">';
         html += '<div class="data-section-title">Fields</div>';
         html += '<div class="data-field-grid">';
@@ -4446,7 +4450,8 @@
         const r = {};
         headers.forEach(h => {
           const cell = row[h.key];
-          r[h.key] = typeof cell === 'object' ? (cell.text || '') : String(cell || '');
+          const displayName = h.name || h.text || h.key;
+          r[displayName] = typeof cell === 'object' ? (cell.text || '') : String(cell || '');
         });
         rowsData.push(r);
       });
