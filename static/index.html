@@ -1520,6 +1520,7 @@
       tableSearchQuery = '';
       tableEditMode = false;
       cellHighlightData = null;
+      tipMode = 'group';
       vlmResult = null; vlmActiveGroup = -1; vlmHighlightAreas = [];
       vlmAnswers = null; vlmAnswersList = []; checkCompareResult = null;
       dataAnswers = null; dataAnswersList = []; dataVlmSelectedCols = [];
@@ -1600,6 +1601,20 @@
             zoomLevel = calcFitZoom(currentViewMode);
             applyZoom();
           }
+          // Re-position pill slider (was hidden when renderPageNav ran)
+          requestAnimationFrame(() => {
+            const tipEl = document.getElementById('tipMode');
+            const activeBtn = tipEl?.querySelector('.pill-opt.active');
+            if (tipEl && activeBtn) updatePillSlider(tipEl, activeBtn);
+          });
+        }
+        if (newTab === 'vtable') {
+          // Re-position pill slider (was hidden when vtRenderPageNav ran)
+          requestAnimationFrame(() => {
+            const vtToggle = document.getElementById('vtTipToggle');
+            const vtActive = vtToggle?.querySelector('.pill-opt.active');
+            if (vtToggle && vtActive) updatePillSlider(vtToggle, vtActive);
+          });
         }
       });
     });
