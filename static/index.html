@@ -2974,6 +2974,19 @@
           if (allItems.some(it => it.regNdx === vcPageIndex)) pageGroups++;
         }
       });
+      // Compute group info text (also used by vcRenderTable, but we pre-fill here so it survives nav rebuilds)
+      const q = vcSearchQuery;
+      let vcGroupInfoText = '';
+      if (q) {
+        const filteredFieldItems = fieldItems.filter(f => vcSearchMatch(f.text || '', q) || vcSearchMatch(f.key, q));
+        const filteredRowItems = rowItems.filter(row => row.cells.some(c => vcSearchMatch(c.text || '', q) || vcSearchMatch(c.key, q)));
+        const shownGroupCount = (filteredFieldItems.length ? 1 : 0) + filteredRowItems.length;
+        const totalGroupCount = (fieldItems.length ? 1 : 0) + rowItems.length;
+        vcGroupInfoText = `${shownGroupCount}/${totalGroupCount}`;
+      } else {
+        const totalGroupCount = (fieldItems.length ? 1 : 0) + rowItems.length;
+        vcGroupInfoText = totalGroupCount ? `${totalGroupCount} 組` : '';
+      }
       nav.innerHTML = `
         <button class="page-arrow" id="vcPrev" ${vcPageIndex <= 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
         <span class="page-indicator" id="vcIndicator" title="Click to jump">${vcPageIndex + 1} / ${total}</span>
@@ -2991,7 +3004,7 @@
         <button class="vc-icon-btn${vcSegment ? ' active' : ''}" id="vcSegToggle" title="長字分段"><img src="${vcSegment ? vcIcons.segAmber : vcIcons.segBlue}"></button>
         <button class="vc-icon-btn" id="vcExportCfg" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
         <div class="search-bar vc-search-bar">
-          <span class="vc-group-info" id="vcGroupInfo"></span>
+          <span class="vc-group-info" id="vcGroupInfo">${vcGroupInfoText}</span>
           <div class="search-wrap">
             <input type="text" id="vcSearchInput" placeholder="搜尋欄位..." value="${escHtml(vcSearchQuery)}">
             <button class="search-clear" id="vcSearchClear">&times;</button>
