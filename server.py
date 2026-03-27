@@ -111,12 +111,17 @@ async def upload_ticket(request: Request, files: List[UploadFile] = File(...)):
     ticket_id = None
     saved_files = []
 
+    # Peek at ticket_id from first file path
+    first_rel = files[0].filename.replace("\\", "/")
+    ticket_id = first_rel.split("/")[0]
+
+    # Clear existing ticket directory to prevent stale files
+    existing_dir = base / ticket_id
+    if existing_dir.exists():
+        shutil.rmtree(existing_dir)
+
     for f in files:
         rel_path = f.filename.replace("\\", "/")
-        parts = rel_path.split("/")
-        if ticket_id is None:
-            ticket_id = parts[0]
-
         dest = base / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
         content = await f.read()

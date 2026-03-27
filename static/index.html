@@ -5822,7 +5822,7 @@
             uploadProgressText.textContent = `Uploading... ${pct}%`;
           }
         });
-        await new Promise((resolve, reject) => {
+        const uploaded = await new Promise((resolve, reject) => {
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
             else reject(new Error(xhr.statusText));
@@ -5839,6 +5839,11 @@
         folderInput.value = '';
         const tickets = await fetchJSON('/api/tickets');
         renderTicketList(tickets);
+        // If re-uploading the currently viewed ticket, force reload
+        if (uploaded.ticketId && currentTicket === uploaded.ticketId) {
+          currentTicket = null;
+          selectTicket(uploaded.ticketId);
+        }
       } catch (err) {
         uploadProgressText.textContent = 'Upload failed: ' + err.message;
         uploadProgressFill.style.width = '0%';
