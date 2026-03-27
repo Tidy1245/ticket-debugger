@@ -2203,13 +2203,20 @@
     // Sync Table Data DOM edits back to ticketData
     function syncTableDomToData() {
       if (!ticketData) return;
+      // Normalize for comparison: collapse \r\n/\r to \n
+      const norm = s => (s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       // Sync table cells (only if in edit mode — data-key/data-row only exist then)
       document.querySelectorAll('#tableContent td[data-key][data-row]').forEach(td => {
         const ri = parseInt(td.dataset.row);
         const key = td.dataset.key;
         const tables = ticketData.tables || [];
-        if (tables[0]?.rows?.[ri]?.[key]) {
-          tables[0].rows[ri][key].text = td.textContent;
+        const cell = tables[0]?.rows?.[ri]?.[key];
+        if (!cell) return;
+        const domText = td.textContent;
+        // Only sync if content actually changed (ignore \r\n normalization)
+        if (norm(domText) !== norm(cell.text)) {
+          cell.text = domText;
+          if (cell.textModify) cell.textModify = domText;
         }
       });
       // Sync area fields (contenteditable .area-value)
@@ -2217,7 +2224,9 @@
         const label = el.closest('.area-item')?.querySelector('.area-label')?.textContent || '';
         if (label && ticketData.areas) {
           const area = ticketData.areas.find(a => a.key === label);
-          if (area) area.text = el.textContent;
+          if (area && norm(el.textContent) !== norm(area.text)) {
+            area.text = el.textContent;
+          }
         }
       });
     }
@@ -2511,6 +2520,7 @@
       } else {
         document.getElementById('tableEditToggle')?.addEventListener('click', () => {
           tableEditMode = true;
+          tableShowNewlines = true;
           renderTable();
         });
       }
@@ -2939,10 +2949,11 @@
       return d.innerHTML;
     }
     function escHtmlNl(s) {
-      // escHtml + visualize newline chars
-      return escHtml(s).replace(/\r\n/g, '<span class="nl-mark">\\r\\n</span>\n')
-                       .replace(/\r/g, '<span class="nl-mark">\\r</span>\n')
-                       .replace(/\n/g, '<span class="nl-mark">\\n</span>\n');
+      // escHtml + visualize newline chars (single-pass to avoid double replacement)
+      return escHtml(s).replace(/\r\n|\r|\n/g, m => {
+        const label = m === '\r\n' ? '\\r\\n' : m === '\r' ? '\\r' : '\\n';
+        return '<span class="nl-mark">' + label + '</span><br>';
+      });
     }
 
     // --- Data Management ---
