@@ -1395,6 +1395,7 @@
   <script>
     const API = '';
     let currentTicket = null;
+    let imgCacheBust = '';
     let currentPageIndex = 0;
     let ticketData = null;
     let pageAreas = {};
@@ -1512,6 +1513,7 @@
     async function selectTicket(id) {
       if (currentTicket === id) return;
       currentTicket = id;
+      imgCacheBust = '?t=' + Date.now();
       currentPageIndex = 0;
       pageAreas = {};
       visibleColumns = null;
@@ -1899,7 +1901,7 @@
         return;
       }
 
-      const imgUrl = `/tickets/${currentTicket}/images/${filename}`;
+      const imgUrl = `/tickets/${currentTicket}/images/${filename}${imgCacheBust}`;
 
       // Load areas if needed
       if (!pageAreas[currentPageIndex]) {
@@ -1913,7 +1915,7 @@
       const procFilename = page.inputList[0];
       if (procFilename && procFilename !== filename) {
         const procImg = new Image();
-        procImg.src = `/tickets/${currentTicket}/images/${procFilename}`;
+        procImg.src = `/tickets/${currentTicket}/images/${procFilename}${imgCacheBust}`;
         procImg.onload = () => {
           processorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
           renderAreaOverlays(); // re-render with correct scale
@@ -3146,14 +3148,14 @@
         container.innerHTML = '<p style="padding:40px;color:var(--text-muted);text-align:center;">No image available</p>';
         return;
       }
-      const imgUrl = `/tickets/${currentTicket}/images/${filename}`;
+      const imgUrl = `/tickets/${currentTicket}/images/${filename}${imgCacheBust}`;
 
       // Preload processor image for coordinate scaling
       vcProcessorImgSize = null;
       const procFilename = page.inputList[0];
       if (procFilename && procFilename !== filename) {
         const procImg = new Image();
-        procImg.src = `/tickets/${currentTicket}/images/${procFilename}`;
+        procImg.src = `/tickets/${currentTicket}/images/${procFilename}${imgCacheBust}`;
         procImg.onload = () => {
           vcProcessorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
           vcRenderHighlight();
@@ -3936,13 +3938,13 @@
         container.innerHTML = '<p style="padding:40px;color:var(--text-muted);text-align:center;">No image available</p>';
         return;
       }
-      const imgUrl = `/tickets/${currentTicket}/images/${filename}`;
+      const imgUrl = `/tickets/${currentTicket}/images/${filename}${imgCacheBust}`;
 
       vtProcessorImgSize = null;
       const procFilename = page.inputList[0];
       if (procFilename && procFilename !== filename) {
         const procImg = new Image();
-        procImg.src = `/tickets/${currentTicket}/images/${procFilename}`;
+        procImg.src = `/tickets/${currentTicket}/images/${procFilename}${imgCacheBust}`;
         procImg.onload = () => {
           vtProcessorImgSize = { w: procImg.naturalWidth, h: procImg.naturalHeight };
           vtRenderHighlight();
