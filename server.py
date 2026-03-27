@@ -256,11 +256,13 @@ async def get_ticket(request: Request, ticket_id: str):
     for integ in integrator_list:
         # Extract areaList key-value fields
         for area in integ.get("areaList", []):
+            area_text = area.get("text", "")
+            area_ocr = area.get("textOCR", "")
             areas.append({
                 "key": area.get("key", ""),
                 "name": area.get("name", ""),
-                "text": area.get("text", ""),
-                "textOCR": area.get("textOCR", ""),
+                "text": str(area_text) if area_text != "" else "",
+                "textOCR": str(area_ocr) if area_ocr != "" else "",
                 "confidence": area.get("confidence", []),
                 "confidenceOCR": area.get("confidenceOCR", []),
                 "regNdx": area.get("regNdx"),
@@ -276,9 +278,11 @@ async def get_ticket(request: Request, ticket_id: str):
             for row_cells in tbl.get("data", []):
                 row = {}
                 for cell in row_cells:
+                    raw_text = cell.get("text", "")
+                    raw_modify = cell.get("textModify", "")
                     cell_data = {
-                        "text": cell.get("text", ""),
-                        "textModify": cell.get("textModify", ""),
+                        "text": str(raw_text) if raw_text != "" else "",
+                        "textModify": str(raw_modify) if raw_modify != "" else "",
                         "confidence": cell.get("confidence", []),
                         "isFormatError": cell.get("isFormatError", False),
                         "regNdx": cell.get("regNdx"),
