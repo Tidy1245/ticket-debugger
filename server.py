@@ -349,7 +349,10 @@ async def get_image(request: Request, ticket_id: str, filename: str):
     file_path = ip_dir(ip) / ticket_id / filename
     if not file_path.exists():
         raise HTTPException(404, "Image not found")
-    return FileResponse(file_path, media_type="image/jpeg")
+    return FileResponse(
+        file_path, media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
 
 
 class VLMGroupingRequest(BaseModel):
