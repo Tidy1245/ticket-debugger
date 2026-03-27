@@ -312,7 +312,7 @@
     .vc-field-value.vc-segmented .vc-seg { display: inline-block; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.12); border-radius: 3px; padding: 0 4px; margin: 1px 2px 1px 0; white-space: nowrap; }
     /* VC search */
     .vc-search-bar { margin-left: auto; }
-    .vc-search-bar .vc-group-info { font-size: 11px; color: var(--text-muted); font-family: 'Fira Code', monospace; white-space: nowrap; }
+    .vc-group-info { font-size: 13px; color: var(--text-muted); font-family: 'Fira Code', monospace; white-space: nowrap; }
     .vc-search-hit { background: rgba(245, 158, 11, 0.3); border-radius: 2px; }
     .vc-field-item.vc-search-match { background: rgba(245, 158, 11, 0.08); }
 
@@ -2329,10 +2329,23 @@
 
       let html = '';
 
+      // Group count for TD
+      const tdTotalGroups = (areas.length ? 1 : 0) + (tables.length ? (tables[0].rows || []).length : 0);
+      let tdGroupInfoText;
+      if (q) {
+        const filteredAreaCount = areas.filter(a => tableSearchMatch(a.text || a.textOCR || '', q) || tableSearchMatch(a.name || a.key || '', q)).length;
+        const filteredRowCount = tables.length ? (tables[0].rows || []).filter(row => (tables[0].headers || []).some(h => { const c = row[h.key] || {}; return tableSearchMatch(c.text || '', q) || tableSearchMatch(c.textModify || '', q); })).length : 0;
+        const tdShownGroups = (filteredAreaCount ? 1 : 0) + filteredRowCount;
+        tdGroupInfoText = `${tdShownGroups}/${tdTotalGroups}`;
+      } else {
+        tdGroupInfoText = tdTotalGroups ? `${tdTotalGroups} 組` : '';
+      }
+
       // Search bar
       html += `<div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
         <div style="flex:1;"></div>
         <div class="search-bar" style="flex-shrink:0;">
+          <span class="vc-group-info" id="tdGroupInfo">${tdGroupInfoText}</span>
           <div class="search-wrap">
             <input type="text" id="tableSearchInput" placeholder="Search data text..." value="${escHtml(tableSearchQuery)}">
             <button class="search-clear" id="tableSearchClear">&times;</button>
@@ -3479,8 +3492,18 @@
           }
 
           header.classList.add('active');
-          header.closest('.vc-group-card').classList.add('vc-active');
+          const card = header.closest('.vc-group-card');
+          card.classList.add('vc-active');
           vcActiveGroupIdx = gidx;
+
+          // Scroll the card to the top of the scrollable container
+          requestAnimationFrame(() => {
+            const container = document.getElementById('vcTableContent');
+            if (container && card) {
+              const cardTop = card.offsetTop - container.offsetTop;
+              container.scrollTo({ top: cardTop, behavior: 'smooth' });
+            }
+          });
 
           // Collect all items for this group
           if (gidx === -2) {
