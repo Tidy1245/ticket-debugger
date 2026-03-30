@@ -2479,14 +2479,6 @@
               const hasLoc = hasAreaList || hasSingleLoc;
               if (hasLoc && !tableEditMode) cellClass += ' locatable';
 
-              // DEBUG: check if \r survives HTTP transmission
-              if (text.includes('\n') && !window._nlDebugDone) {
-                window._nlDebugDone = true;
-                console.log('[NL-DEBUG] text has \\r:', text.includes('\r'), 'textModify has \\r:', textModify.includes('\r'));
-                console.log('[NL-DEBUG] text charCodes around newline:', [...text].map(c => c.charCodeAt(0)).filter(c => c <= 13));
-                console.log('[NL-DEBUG] textModify charCodes around newline:', [...textModify].map(c => c.charCodeAt(0)).filter(c => c <= 13));
-              }
-
               let content;
               const esc = tableShowNewlines && !tableEditMode ? escHtmlNl : escHtml;
               if (tableEditMode) {
@@ -2981,8 +2973,8 @@
       // Split before escHtml to prevent DOM normalizing \r\n → \n
       // Treat standalone \n as \r\n (OCR pipeline data uses \r\n; lone \n is a transport artifact)
       return String(s).split(/(\r\n|\r|\n)/).map(p => {
-        if (p === '\r\n' || p === '\n') return '<span class="nl-mark">\\r\\n</span><br>';
-        if (p === '\r') return '<span class="nl-mark">\\r</span><br>';
+        if (p === '\r\n' || p === '\n') return '<span class="nl-mark">\\r\\n</span>';
+        if (p === '\r') return '<span class="nl-mark">\\r</span>';
         return escHtml(p);
       }).join('');
     }
