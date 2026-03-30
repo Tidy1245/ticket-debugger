@@ -2479,6 +2479,14 @@
               const hasLoc = hasAreaList || hasSingleLoc;
               if (hasLoc && !tableEditMode) cellClass += ' locatable';
 
+              // DEBUG: check if \r survives HTTP transmission
+              if (text.includes('\n') && !window._nlDebugDone) {
+                window._nlDebugDone = true;
+                console.log('[NL-DEBUG] text has \\r:', text.includes('\r'), 'textModify has \\r:', textModify.includes('\r'));
+                console.log('[NL-DEBUG] text charCodes around newline:', [...text].map(c => c.charCodeAt(0)).filter(c => c <= 13));
+                console.log('[NL-DEBUG] textModify charCodes around newline:', [...textModify].map(c => c.charCodeAt(0)).filter(c => c <= 13));
+              }
+
               let content;
               const esc = tableShowNewlines && !tableEditMode ? escHtmlNl : escHtml;
               if (tableEditMode) {
