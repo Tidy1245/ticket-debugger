@@ -2210,8 +2210,10 @@
     // Sync Table Data DOM edits back to ticketData
     function syncTableDomToData() {
       if (!ticketData) return;
+      // Convert literal \r\n marker text back to actual CR+LF
+      const unmark = s => s.replace(/\\r\\n/g, '\r\n').replace(/\\r/g, '\r').replace(/\\n/g, '\n');
       // Normalize for comparison: collapse \r\n/\r to \n
-      const norm = s => (s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const norm = s => (s || '').replace(/\\r\\n/g, '').replace(/\\r/g, '').replace(/\\n/g, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       // Sync table cells (only if in edit mode — data-key/data-row only exist then)
       document.querySelectorAll('#tableContent td[data-key][data-row]').forEach(td => {
         const ri = parseInt(td.dataset.row);
@@ -2219,7 +2221,8 @@
         const tables = ticketData.tables || [];
         const cell = tables[0]?.rows?.[ri]?.[key];
         if (!cell) return;
-        const domText = td.textContent;
+        let domText = td.textContent;
+        if (tableShowNewlines) domText = unmark(domText);
         // Only sync if content actually changed (ignore \r\n normalization)
         if (norm(domText) !== norm(cell.text)) {
           cell.text = domText;
@@ -2231,8 +2234,10 @@
         const label = el.closest('.area-item')?.querySelector('.area-label')?.textContent || '';
         if (label && ticketData.areas) {
           const area = ticketData.areas.find(a => a.key === label);
-          if (area && norm(el.textContent) !== norm(area.text)) {
-            area.text = el.textContent;
+          let domText = el.textContent;
+          if (tableShowNewlines) domText = unmark(domText);
+          if (area && norm(domText) !== norm(area.text)) {
+            area.text = domText;
           }
         }
       });
