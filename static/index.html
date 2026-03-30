@@ -1576,6 +1576,11 @@
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById(`panel${capitalize(tab.dataset.tab)}`).classList.add('active');
+        // Save TD scroll position before leaving
+        if (prevActiveTab === 'table') {
+          const tc = document.querySelector('#tableContent .table-container');
+          if (tc) { tableScrollTop = tc.scrollTop; tableScrollLeft = tc.scrollLeft; }
+        }
         // Sync edits from outgoing tab before switching
         if (prevActiveTab === 'table' && tableEditMode) syncTableDomToData();
         if (prevActiveTab === 'visual' && vcEditMode) syncVcDomToData();
@@ -2199,6 +2204,8 @@
     let tableSearchExact = false;
     let tableEditMode = false;
     let tableShowNewlines = false;
+    let tableScrollTop = 0;
+    let tableScrollLeft = 0;
 
     // Sync Table Data DOM edits back to ticketData
     function syncTableDomToData() {
@@ -2504,7 +2511,21 @@
 
       // (save bar removed — edit actions are now inline icon buttons)
 
+      // Save scroll position before DOM rebuild
+      const oldContainer = document.querySelector('#tableContent .table-container');
+      if (oldContainer) {
+        tableScrollTop = oldContainer.scrollTop;
+        tableScrollLeft = oldContainer.scrollLeft;
+      }
+
       document.getElementById('tableContent').innerHTML = html;
+
+      // Restore scroll position after DOM rebuild
+      const newContainer = document.querySelector('#tableContent .table-container');
+      if (newContainer) {
+        newContainer.scrollTop = tableScrollTop;
+        newContainer.scrollLeft = tableScrollLeft;
+      }
 
       // Edit toggle
       if (tableEditMode) {
@@ -2949,11 +2970,13 @@
       return d.innerHTML;
     }
     function escHtmlNl(s) {
-      // escHtml + visualize newline chars (single-pass to avoid double replacement)
-      return escHtml(s).replace(/\r\n|\r|\n/g, m => {
-        const label = m === '\r\n' ? '\\r\\n' : m === '\r' ? '\\r' : '\\n';
-        return '<span class="nl-mark">' + label + '</span><br>';
-      });
+      // Split before escHtml to prevent DOM normalizing \r\n → \n
+      return String(s).split(/(\r\n|\r|\n)/).map(p => {
+        if (p === '\r\n') return '<span class="nl-mark">\\r\\n</span><br>';
+        if (p === '\r') return '<span class="nl-mark">\\r</span><br>';
+        if (p === '\n') return '<span class="nl-mark">\\n</span><br>';
+        return escHtml(p);
+      }).join('');
     }
 
     // --- Data Management ---
