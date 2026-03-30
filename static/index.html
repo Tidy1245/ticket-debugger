@@ -3086,8 +3086,8 @@
       cancelAmber: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
       cancelRed: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZWY0NDQ0IiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
       savePurple: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTc4YmZhIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDIxSDVhMiAyIDAgMDEtMi0yVjVhMiAyIDAgMDEyLTJoMTFsNSA1djExYTIgMiAwIDAxLTIgMnoiLz48cG9seWxpbmUgcG9pbnRzPSIxNyAyMSAxNyAxMyA3IDEzIDcgMjEiLz48cG9seWxpbmUgcG9pbnRzPSI3IDMgNyA4IDE1IDgiLz48L3N2Zz4=',
-      addRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12h14a2 2 0 0 1 0 4H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2"/><line x1="7" y1="4" x2="7" y2="10"/><line x1="4" y1="7" x2="10" y2="7"/></svg>')}`,
-      deleteRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12h14a2 2 0 0 1 0 4H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2"/><line x1="4" y1="7" x2="10" y2="7"/></svg>')}`,
+      addRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>')}`,
+      deleteRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>')}`,
     };
     let vcPageIndex = 0;
     let vcProcessorImgSize = null;
@@ -3982,7 +3982,9 @@
         ${vtEditMode
           ? `<button class="vc-icon-btn active" id="vtEditConfirm" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
              <button class="vc-icon-btn" id="vtEditCancel" title="取消編輯"><img src="${vcIcons.cancelRed}"></button>
-             <button class="vc-icon-btn" id="vtEditSave" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
+             <button class="vc-icon-btn" id="vtEditSave" title="另存答案"><img src="${vcIcons.savePurple}"></button>
+             <button class="vc-icon-btn" id="vtAddRow" title="新增行"><img src="${vcIcons.addRowBlue}"></button>
+             <button class="vc-icon-btn" id="vtDeleteRow" title="刪減行"><img src="${vcIcons.deleteRowBlue}"></button>`
           : `<button class="vc-icon-btn" id="vtEditToggle" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
         <button class="vc-icon-btn${vtCopyOcr ? ' active' : ''}" id="vtCopyOcrToggle" title="複製OCR文字"><img src="${vtCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
         <button class="vc-icon-btn${vtShowOcr ? ' active' : ''}${vtCopyOcr ? ' disabled' : ''}" id="vtShowOcrBtn" title="顯示OCR區域"><img src="${vtShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
@@ -4039,6 +4041,19 @@
       if (vtEditMode) {
         document.getElementById('vtEditConfirm')?.addEventListener('click', () => {
           syncVtDomToData();
+          // Remove empty new rows
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const headers = tables[0]?.headers || [];
+          for (let i = allRows.length - 1; i >= 0; i--) {
+            const row = allRows[i];
+            const isNew = headers.some(h => row[h.key]?._isNewRow);
+            if (isNew) {
+              const allEmpty = headers.every(h => !(row[h.key]?.text || '').trim());
+              if (allEmpty) allRows.splice(i, 1);
+              else headers.forEach(h => { if (row[h.key]) delete row[h.key]._isNewRow; });
+            }
+          }
           vtEditMode = false;
           vtRenderPageNav();
           vtRenderTable();
@@ -4051,6 +4066,44 @@
         });
         document.getElementById('vtEditSave')?.addEventListener('click', () => {
           document.getElementById('vtSaveAsAnswer')?.click();
+        });
+        // Add row
+        document.getElementById('vtAddRow')?.addEventListener('click', () => {
+          syncVtDomToData();
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const total = allRows.length;
+          const input = prompt(`插入新行於第幾項之後？（1~${total}，輸入 0 表示插入在最前面）`);
+          if (input === null) return;
+          const n = Number(input);
+          if (!Number.isInteger(n) || n < 0 || n > total) {
+            alert(`請輸入 0~${total} 的整數`);
+            return;
+          }
+          const headers = tables[0]?.headers || [];
+          const emptyRow = {};
+          headers.forEach(h => {
+            emptyRow[h.key] = { text: '', textModify: '', x: 0, y: 0, w: 1, h: 1, regNdx: 0, _isNewRow: true };
+          });
+          allRows.splice(n, 0, emptyRow);
+          vtRenderTable();
+        });
+        // Delete row
+        document.getElementById('vtDeleteRow')?.addEventListener('click', () => {
+          syncVtDomToData();
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const total = allRows.length;
+          if (total === 0) { alert('沒有可刪除的行'); return; }
+          const input = prompt(`刪除第幾項？（1~${total}）`);
+          if (input === null) return;
+          const n = Number(input);
+          if (!Number.isInteger(n) || n < 1 || n > total) {
+            alert(`請輸入 1~${total} 的整數`);
+            return;
+          }
+          allRows.splice(n - 1, 1);
+          vtRenderTable();
         });
       } else {
         document.getElementById('vtEditToggle')?.addEventListener('click', () => {
@@ -4391,6 +4444,7 @@
         // Table window (single scrollable container with thead + tbody)
         html += '<div class="table-container" id="vtBodyWrap" style="flex:1;min-height:0;overflow:auto;">';
         html += '<table id="vtBodyTable"><thead><tr>';
+        html += '<th style="width:36px;text-align:center;position:sticky;top:0;z-index:2;background:var(--bg-card);">#</th>';
         headers.filter(h => vtVisibleColumns.has(h.key)).forEach(h => {
           html += `<th title="${h.key}" style="position:sticky;top:0;z-index:2;background:var(--bg-card);">${h.name || h.text || h.key}</th>`;
         });
@@ -4399,6 +4453,7 @@
         rows.forEach(row => {
           const ri = allRows.indexOf(row);
           html += `<tr data-vtrow="${ri}">`;
+          html += `<td style="width:36px;text-align:center;color:var(--text-muted);font-size:0.85em;user-select:none;">${ri + 1}</td>`;
           headers.filter(h => vtVisibleColumns.has(h.key)).forEach((h, ci) => {
             const cell = row[h.key] || {};
             const text = cell.text || '';
@@ -4520,6 +4575,12 @@
         const rows = [];
         const headers = ticketData.tables?.[0]?.headers || [];
         (ticketData.tables?.[0]?.rows || []).forEach(row => {
+          // Skip empty new rows
+          const isNew = headers.some(h => row[h.key]?._isNewRow);
+          if (isNew) {
+            const allEmpty = headers.every(h => !(row[h.key]?.text || '').trim());
+            if (allEmpty) return;
+          }
           const r = {};
           headers.forEach(h => {
             const cell = row[h.key];
@@ -4535,6 +4596,17 @@
             body: JSON.stringify({ ticketId: currentTicket, fields, rows, columns, source: 'visual-table' }),
           });
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+          // Clean up empty new rows and _isNewRow flags
+          const cleanRows = ticketData.tables?.[0]?.rows || [];
+          for (let i = cleanRows.length - 1; i >= 0; i--) {
+            const r = cleanRows[i];
+            const isNew = headers.some(h => r[h.key]?._isNewRow);
+            if (isNew) {
+              const allEmpty = headers.every(h => !(r[h.key]?.text || '').trim());
+              if (allEmpty) cleanRows.splice(i, 1);
+              else headers.forEach(h => { if (r[h.key]) delete r[h.key]._isNewRow; });
+            }
+          }
           await loadDataAnswersList();
           vtEditMode = false;
           vtRenderPageNav();
