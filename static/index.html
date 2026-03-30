@@ -2442,7 +2442,9 @@
             ${tableEditMode
               ? `<button class="vc-icon-btn active" id="tableEditConfirm" style="margin-left:8px;" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
                  <button class="vc-icon-btn" id="tableEditCancel" style="margin-left:2px;" title="取消編輯"><img src="${vcIcons.cancelRed}"></button>
-                 <button class="vc-icon-btn" id="tableSaveAnswer" style="margin-left:2px;" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
+                 <button class="vc-icon-btn" id="tableSaveAnswer" style="margin-left:2px;" title="另存答案"><img src="${vcIcons.savePurple}"></button>
+                 <button class="vc-icon-btn" id="tableAddRow" style="margin-left:2px;" title="新增行"><img src="${vcIcons.addRowBlue}"></button>
+                 <button class="vc-icon-btn" id="tableDeleteRow" style="margin-left:2px;" title="刪減行"><img src="${vcIcons.deleteRowBlue}"></button>`
               : `<button class="vc-icon-btn" id="tableEditToggle" style="margin-left:8px;" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
             <button class="vc-icon-btn${tableShowNewlines ? ' active' : ''}${tableEditMode ? ' disabled' : ''}" id="tableNlToggle" style="margin-left:2px;" title="顯示換行符號"><svg viewBox="0 0 18 18" width="16" height="16" style="display:block;"><path d="M13 4v7H5" stroke="${tableShowNewlines ? 'var(--accent-amber)' : 'var(--accent-blue)'}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="8,8 5,11 8,14" stroke="${tableShowNewlines ? 'var(--accent-amber)' : 'var(--accent-blue)'}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button class="vc-icon-btn" id="tableExportCfg" style="margin-left:2px;" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
@@ -2536,11 +2538,63 @@
       if (tableEditMode) {
         document.getElementById('tableEditConfirm')?.addEventListener('click', () => {
           syncTableDomToData();
+          // Remove empty new rows (all cells have no text)
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const headers = tables[0]?.headers || [];
+          for (let i = allRows.length - 1; i >= 0; i--) {
+            const row = allRows[i];
+            const isNew = headers.some(h => row[h.key]?._isNewRow);
+            if (isNew) {
+              const allEmpty = headers.every(h => !(row[h.key]?.text || '').trim());
+              if (allEmpty) allRows.splice(i, 1);
+              else headers.forEach(h => { if (row[h.key]) delete row[h.key]._isNewRow; });
+            }
+          }
           tableEditMode = false;
           renderTable();
         });
         document.getElementById('tableEditCancel')?.addEventListener('click', () => {
           tableEditMode = false;
+          renderTable();
+        });
+        // Add row
+        document.getElementById('tableAddRow')?.addEventListener('click', () => {
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const total = allRows.length;
+          const input = prompt(`插入新行於第幾項之後？（1~${total}，輸入 0 表示插入在最前面）`);
+          if (input === null) return;
+          const n = Number(input);
+          if (!Number.isInteger(n) || n < 0 || n > total) {
+            alert(`請輸入 0~${total} 的整數`);
+            return;
+          }
+          // Build empty row with same keys as headers
+          const headers = tables[0]?.headers || [];
+          const emptyRow = {};
+          headers.forEach(h => {
+            emptyRow[h.key] = { text: '', textModify: '', x: 0, y: 0, w: 1, h: 1, regNdx: 0, _isNewRow: true };
+          });
+          allRows.splice(n, 0, emptyRow);
+          syncTableDomToData();
+          renderTable();
+        });
+        // Delete row
+        document.getElementById('tableDeleteRow')?.addEventListener('click', () => {
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const total = allRows.length;
+          if (total === 0) { alert('沒有可刪除的行'); return; }
+          const input = prompt(`刪除第幾項？（1~${total}）`);
+          if (input === null) return;
+          const n = Number(input);
+          if (!Number.isInteger(n) || n < 1 || n > total) {
+            alert(`請輸入 1~${total} 的整數`);
+            return;
+          }
+          allRows.splice(n - 1, 1);
+          syncTableDomToData();
           renderTable();
         });
       } else {
@@ -2609,12 +2663,18 @@
         const headers = ticketData.tables?.[0]?.headers || [];
         const keyToName = {};
         headers.forEach(h => { keyToName[h.key] = h.name || h.text || h.key; });
+        const srcRows = ticketData.tables?.[0]?.rows || [];
         document.querySelectorAll('#tableContent table tbody tr').forEach(tr => {
+          const ri = parseInt(tr.dataset.row);
+          const srcRow = srcRows[ri];
+          const isNew = srcRow && headers.some(h => srcRow[h.key]?._isNewRow);
           const row = {};
           tr.querySelectorAll('td[data-key]').forEach(td => {
             const displayName = keyToName[td.dataset.key] || td.dataset.key;
             row[displayName] = td.textContent;
           });
+          // Skip empty new rows
+          if (isNew && Object.values(row).every(v => !(v || '').trim())) return;
           if (Object.keys(row).length) rows.push(row);
         });
 
@@ -2627,6 +2687,19 @@
           });
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
           await loadDataAnswersList();
+          // Clean up empty new rows and _isNewRow flags
+          syncTableDomToData();
+          const cleanRows = ticketData.tables?.[0]?.rows || [];
+          const cleanHeaders = ticketData.tables?.[0]?.headers || [];
+          for (let i = cleanRows.length - 1; i >= 0; i--) {
+            const r = cleanRows[i];
+            const isNew = cleanHeaders.some(h => r[h.key]?._isNewRow);
+            if (isNew) {
+              const allEmpty = cleanHeaders.every(h => !(r[h.key]?.text || '').trim());
+              if (allEmpty) cleanRows.splice(i, 1);
+              else cleanHeaders.forEach(h => { if (r[h.key]) delete r[h.key]._isNewRow; });
+            }
+          }
           tableEditMode = false;
           renderTable();
           alert(`答案「${finalName}」已儲存`);
@@ -3013,6 +3086,8 @@
       cancelAmber: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
       cancelRed: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZWY0NDQ0IiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
       savePurple: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTc4YmZhIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDIxSDVhMiAyIDAgMDEtMi0yVjVhMiAyIDAgMDEyLTJoMTFsNSA1djExYTIgMiAwIDAxLTIgMnoiLz48cG9seWxpbmUgcG9pbnRzPSIxNyAyMSAxNyAxMyA3IDEzIDcgMjEiLz48cG9seWxpbmUgcG9pbnRzPSI3IDMgNyA4IDE1IDgiLz48L3N2Zz4=',
+      addRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%234a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12h14a2 2 0 0 1 0 4H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2"/><line x1="7" y1="4" x2="7" y2="10"/><line x1="4" y1="7" x2="10" y2="7"/></svg>')}`,
+      deleteRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%234a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12h14a2 2 0 0 1 0 4H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2"/><line x1="4" y1="7" x2="10" y2="7"/></svg>')}`,
     };
     let vcPageIndex = 0;
     let vcProcessorImgSize = null;
