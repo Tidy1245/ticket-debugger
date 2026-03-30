@@ -4316,6 +4316,11 @@
           div.appendChild(label);
         }
         if (area.text) div.dataset.ocrText = area.text;
+        div.dataset.areaX = area.x;
+        div.dataset.areaY = area.y;
+        div.dataset.areaW = area.w;
+        div.dataset.areaH = area.h;
+        div.dataset.areaP = area.regNdx != null ? area.regNdx : vtPageIndex;
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
         container.appendChild(div);
@@ -4762,6 +4767,13 @@
       e.stopPropagation();
       e.preventDefault();
 
+      // Read area position from overlay data attributes
+      const areaX = +overlay.dataset.areaX;
+      const areaY = +overlay.dataset.areaY;
+      const areaW = +overlay.dataset.areaW;
+      const areaH = +overlay.dataset.areaH;
+      const areaP = parseInt(overlay.dataset.areaP);
+
       const result = await showQuickFillDialog(text);
       if (!result) return;
 
@@ -4770,16 +4782,25 @@
       const targetRow = rows[result.row];
       if (!targetRow) { alert('找不到指定行'); return; }
 
+      // Write OCR text and area position into cell
       if (targetRow[result.key]) {
         targetRow[result.key].text = text;
+        targetRow[result.key].x = areaX;
+        targetRow[result.key].y = areaY;
+        targetRow[result.key].w = areaW;
+        targetRow[result.key].h = areaH;
+        targetRow[result.key].regNdx = areaP;
       } else {
-        targetRow[result.key] = { text, textModify: '', x: 0, y: 0, w: 1, h: 1, regNdx: 0 };
+        targetRow[result.key] = { text, textModify: '', x: areaX, y: areaY, w: areaW, h: areaH, regNdx: areaP };
       }
 
       overlay.style.background = 'rgba(34, 197, 94, 0.4)';
       setTimeout(() => { overlay.style.background = ''; }, 200);
 
       vtRenderTable();
+
+      // Trigger Tip Mode highlight on the filled cell
+      vtHighlightItems([{ x: areaX, y: areaY, w: areaW, h: areaH, regNdx: areaP }]);
     });
 
     // VT drag to pan (only in zoom mode)
