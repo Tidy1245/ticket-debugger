@@ -2397,7 +2397,7 @@
             const locCls = (hasLoc && !tableEditMode) ? ' locatable' : '';
             const locAttr = (hasLoc && !tableEditMode) ? ` data-rx="${a.x}" data-ry="${a.y}" data-rw="${a.w}" data-rh="${a.h}" data-rp="${a.regNdx}" data-rk="${escHtml(label)}" data-rt="${escHtml(value)}"` : '';
             const areaEditAttr = tableEditMode ? ' contenteditable="true"' : '';
-            const areaEsc = tableShowNewlines && !tableEditMode ? escHtmlNl : escHtml;
+            const areaEsc = tableShowNewlines ? escHtmlNl : escHtml;
             const valContent = tableEditMode ? escHtml(value) : (q ? tableHighlightText(value, q) : areaEsc(value));
             html += `<div class="area-item${locCls}"${locAttr}><span class="area-label">${q ? tableHighlightText(label, q) : escHtml(label)}</span><span class="area-value"${areaEditAttr}>${valContent}</span></div>`;
           });
@@ -2439,7 +2439,7 @@
                  <button class="vc-icon-btn" id="tableEditCancel" style="margin-left:2px;" title="取消編輯"><img src="${vcIcons.cancelRed}"></button>
                  <button class="vc-icon-btn" id="tableSaveAnswer" style="margin-left:2px;" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
               : `<button class="vc-icon-btn" id="tableEditToggle" style="margin-left:8px;" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
-            <button class="vc-icon-btn${tableShowNewlines ? ' active' : ''}" id="tableNlToggle" style="margin-left:2px;" title="顯示換行符號"><svg viewBox="0 0 18 18" width="16" height="16" style="display:block;"><path d="M13 4v7H5" stroke="${tableShowNewlines ? 'var(--accent-amber)' : 'var(--accent-blue)'}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="8,8 5,11 8,14" stroke="${tableShowNewlines ? 'var(--accent-amber)' : 'var(--accent-blue)'}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button class="vc-icon-btn${tableShowNewlines ? ' active' : ''}${tableEditMode ? ' disabled' : ''}" id="tableNlToggle" style="margin-left:2px;" title="顯示換行符號"><svg viewBox="0 0 18 18" width="16" height="16" style="display:block;"><path d="M13 4v7H5" stroke="${tableShowNewlines ? 'var(--accent-amber)' : 'var(--accent-blue)'}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="8,8 5,11 8,14" stroke="${tableShowNewlines ? 'var(--accent-amber)' : 'var(--accent-blue)'}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button class="vc-icon-btn" id="tableExportCfg" style="margin-left:2px;" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
             <div class="pill-toggle" id="tdTipMode" style="margin-left:4px;">
               <div class="pill-slider" id="tdTipSlider"></div>
@@ -2480,9 +2480,9 @@
               if (hasLoc && !tableEditMode) cellClass += ' locatable';
 
               let content;
-              const esc = tableShowNewlines && !tableEditMode ? escHtmlNl : escHtml;
+              const esc = tableShowNewlines ? escHtmlNl : escHtml;
               if (tableEditMode) {
-                content = escHtml(text);
+                content = esc(text);
               } else if (isModified) {
                 content = `<div class="cell-diff"><span class="original">${q ? tableHighlightText(text, q) : esc(text)}</span><span class="modified-val">${q ? tableHighlightText(textModify, q) : esc(textModify)}</span></div>`;
               } else {
