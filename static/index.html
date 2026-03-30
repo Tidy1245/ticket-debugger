@@ -2466,13 +2466,14 @@
           html += `
             <div class="table-container" style="flex:1;min-height:0;overflow:auto;">
               <table>
-                <thead><tr>${headers.filter(h => visibleColumns.has(h.key)).map(h => `<th title="${h.key}">${h.name || h.text || h.key}</th>`).join('')}</tr></thead>
+                <thead><tr><th style="width:36px;text-align:center;">#</th>${headers.filter(h => visibleColumns.has(h.key)).map(h => `<th title="${h.key}">${h.name || h.text || h.key}</th>`).join('')}</tr></thead>
                 <tbody>
           `;
 
           rows.forEach((row) => {
             const ri = allRows.indexOf(row);
             html += `<tr data-row="${ri}">`;
+            html += `<td style="width:36px;text-align:center;color:var(--text-muted);font-size:0.85em;user-select:none;">${ri + 1}</td>`;
             headers.filter(h => visibleColumns.has(h.key)).forEach(h => {
               const cell = row[h.key] || {};
               const text = cell.text || '';
@@ -2560,6 +2561,7 @@
         });
         // Add row
         document.getElementById('tableAddRow')?.addEventListener('click', () => {
+          syncTableDomToData(); // sync current edits before modifying rows
           const tables = ticketData?.tables || [];
           const allRows = tables[0]?.rows || [];
           const total = allRows.length;
@@ -2570,18 +2572,17 @@
             alert(`請輸入 0~${total} 的整數`);
             return;
           }
-          // Build empty row with same keys as headers
           const headers = tables[0]?.headers || [];
           const emptyRow = {};
           headers.forEach(h => {
             emptyRow[h.key] = { text: '', textModify: '', x: 0, y: 0, w: 1, h: 1, regNdx: 0, _isNewRow: true };
           });
           allRows.splice(n, 0, emptyRow);
-          syncTableDomToData();
           renderTable();
         });
         // Delete row
         document.getElementById('tableDeleteRow')?.addEventListener('click', () => {
+          syncTableDomToData(); // sync current edits before modifying rows
           const tables = ticketData?.tables || [];
           const allRows = tables[0]?.rows || [];
           const total = allRows.length;
@@ -2594,7 +2595,6 @@
             return;
           }
           allRows.splice(n - 1, 1);
-          syncTableDomToData();
           renderTable();
         });
       } else {
@@ -3086,8 +3086,8 @@
       cancelAmber: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjU5ZTBiIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
       cancelRed: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZWY0NDQ0IiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48bGluZSB4MT0iMTgiIHkxPSI2IiB4Mj0iNiIgeTI9IjE4Ii8+PGxpbmUgeDE9IjYiIHkxPSI2IiB4Mj0iMTgiIHkyPSIxOCIvPjwvc3ZnPg==',
       savePurple: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTc4YmZhIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDIxSDVhMiAyIDAgMDEtMi0yVjVhMiAyIDAgMDEyLTJoMTFsNSA1djExYTIgMiAwIDAxLTIgMnoiLz48cG9seWxpbmUgcG9pbnRzPSIxNyAyMSAxNyAxMyA3IDEzIDcgMjEiLz48cG9seWxpbmUgcG9pbnRzPSI3IDMgNyA4IDE1IDgiLz48L3N2Zz4=',
-      addRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%234a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12h14a2 2 0 0 1 0 4H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2"/><line x1="7" y1="4" x2="7" y2="10"/><line x1="4" y1="7" x2="10" y2="7"/></svg>')}`,
-      deleteRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%234a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12h14a2 2 0 0 1 0 4H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2"/><line x1="4" y1="7" x2="10" y2="7"/></svg>')}`,
+      addRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12h14a2 2 0 0 1 0 4H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2"/><line x1="7" y1="4" x2="7" y2="10"/><line x1="4" y1="7" x2="10" y2="7"/></svg>')}`,
+      deleteRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12h14a2 2 0 0 1 0 4H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2"/><line x1="4" y1="7" x2="10" y2="7"/></svg>')}`,
     };
     let vcPageIndex = 0;
     let vcProcessorImgSize = null;
