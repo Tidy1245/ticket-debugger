@@ -2349,18 +2349,42 @@
           for (const cfgTable of (integ.tableList || [])) {
             const uiTable = allTables[cfgTableIdx++];
             if (!uiTable?.rows) continue;
-            for (let ri = 0; ri < (cfgTable.data || []).length; ri++) {
+            const hdrList = cfgTable.headerList || cfgTable.headers || [];
+            // Rebuild cfgTable.data from ticketData rows (handles add/delete)
+            const origData = cfgTable.data || [];
+            const newData = [];
+            let origIdx = 0; // tracks position in original config data
+            for (let ri = 0; ri < uiTable.rows.length; ri++) {
               const uiRow = uiTable.rows[ri];
-              if (!uiRow) continue;
-              for (const cell of cfgTable.data[ri]) {
-                const key = cell.key || cell.name || '';
-                if (!key) continue;
-                const uiCell = uiRow[key];
-                if (uiCell !== undefined) {
-                  cell.text = typeof uiCell === 'object' ? (uiCell.text ?? '') : String(uiCell);
-                }
+              const isNew = hdrList.some(h => uiRow[h.key || h.name]?._isNewRow);
+              if (isNew) {
+                // Inserted row: create new cells with empty textModify
+                const newRow = hdrList.map(h => {
+                  const key = h.key || h.name || '';
+                  const uiCell = uiRow[key];
+                  const text = uiCell ? (uiCell.text ?? '') : '';
+                  return { key, name: h.name || '', x: 0, y: 0, w: 1, h: 1, text, textModify: '', confidence: [], isFormatError: false, regNdx: 0 };
+                });
+                newData.push(newRow);
+              } else {
+                // Existing row: use original config row, update text + textModify
+                const origRow = origData[origIdx] || [];
+                origIdx++;
+                const newRow = hdrList.map(h => {
+                  const key = h.key || h.name || '';
+                  const origCell = origRow.find?.(c => (c.key || c.name) === key);
+                  const uiCell = uiRow[key];
+                  const text = uiCell ? (typeof uiCell === 'object' ? (uiCell.text ?? '') : String(uiCell)) : (origCell?.text ?? '');
+                  const textModify = uiCell ? (typeof uiCell === 'object' ? (uiCell.textModify ?? text) : text) : (origCell?.textModify ?? text);
+                  if (origCell) {
+                    return { ...origCell, text, textModify };
+                  }
+                  return { key, name: h.name || '', x: 0, y: 0, w: 1, h: 1, text, textModify, confidence: [], isFormatError: false, regNdx: 0 };
+                });
+                newData.push(newRow);
               }
             }
+            cfgTable.data = newData;
           }
           for (const cfgArea of (integ.areaList || [])) {
             const key = cfgArea.key || cfgArea.name || '';
