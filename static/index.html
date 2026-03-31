@@ -2268,6 +2268,11 @@
         if (norm(domText) !== norm(cell.text)) {
           cell.text = domText;
           if (cell.textModify) cell.textModify = domText;
+          // Clear location data if text fully deleted
+          if (!domText.trim()) {
+            cell.x = 0; cell.y = 0; cell.w = 1; cell.h = 1; cell.regNdx = null;
+            delete cell.areaList;
+          }
         }
       });
       // Sync area fields (contenteditable .area-value)
@@ -4692,8 +4697,14 @@
         const ri = parseInt(td.dataset.row);
         const key = td.dataset.key;
         const tables = ticketData.tables || [];
-        if (tables[0]?.rows?.[ri]?.[key]) {
-          tables[0].rows[ri][key].text = td.textContent;
+        const cell = tables[0]?.rows?.[ri]?.[key];
+        if (cell) {
+          cell.text = td.textContent;
+          // Clear location data if text fully deleted
+          if (!td.textContent.trim()) {
+            cell.x = 0; cell.y = 0; cell.w = 1; cell.h = 1; cell.regNdx = null;
+            delete cell.areaList;
+          }
         }
       });
       document.querySelectorAll('#vtTableContent .area-value[contenteditable]').forEach(el => {
