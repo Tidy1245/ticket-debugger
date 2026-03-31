@@ -327,6 +327,10 @@
     .vc-icon-btn.active { border-color: var(--accent-amber); background: rgba(245, 158, 11, 0.08); }
     .vc-icon-btn.disabled { opacity: 0.3; pointer-events: none; }
     .vc-copy-ocr-mode .vc-area-overlay { cursor: copy; }
+    .vt-copy-ocr-mode .vt-area-overlay {
+      cursor: copy;
+      animation: ocr-copy-glow 1.5s ease-in-out infinite;
+    }
     .vt-quickfill-mode .vt-area-overlay {
       cursor: crosshair;
       border-color: rgba(34, 197, 94, 0.8) !important;
@@ -613,6 +617,10 @@
     @keyframes cell-pulse {
       0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
       50% { box-shadow: 0 0 12px 4px rgba(245, 158, 11, 0.4); }
+    }
+    @keyframes ocr-copy-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+      50% { box-shadow: 0 0 12px 4px rgba(59, 130, 246, 0.4); }
     }
     @keyframes ocr-glow {
       0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
@@ -2531,7 +2539,7 @@
               const hasAreaList = cell.areaList && cell.areaList.length > 0;
               const hasSingleLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
               const hasLoc = hasAreaList || hasSingleLoc;
-              if (hasLoc && !tableEditMode) cellClass += ' locatable';
+              if (hasLoc && !tableEditMode && tipMode === 'cell') cellClass += ' locatable';
 
               let content;
               const esc = tableShowNewlines ? escHtmlNl : escHtml;
@@ -3134,6 +3142,8 @@
       savePurple: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTc4YmZhIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTE5IDIxSDVhMiAyIDAgMDEtMi0yVjVhMiAyIDAgMDEyLTJoMTFsNSA1djExYTIgMiAwIDAxLTIgMnoiLz48cG9seWxpbmUgcG9pbnRzPSIxNyAyMSAxNyAxMyA3IDEzIDcgMjEiLz48cG9seWxpbmUgcG9pbnRzPSI3IDMgNyA4IDE1IDgiLz48L3N2Zz4=',
       addRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>')}`,
       deleteRowBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>')}`,
+      copyBlue: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4a9eff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>')}`,
+      copyAmber: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>')}`,
     };
     let vcPageIndex = 0;
     let vcProcessorImgSize = null;
@@ -3156,6 +3166,7 @@
     let vtActiveHighlight = null;
     let vtEditMode = false;
     let vtQuickFill = false;
+    let vtCopyOcr = false;
     let vtShowOcr = false;
     let vtShowText = false;
     let vtZoomMode = false;
@@ -3959,6 +3970,7 @@
       vtActiveHighlight = null;
       vtEditMode = false;
       vtQuickFill = false;
+      vtCopyOcr = false;
       vtShowOcr = false;
       vtShowText = false;
       vtZoomMode = false;
@@ -4033,7 +4045,8 @@
              <button class="vc-icon-btn" id="vtDeleteRow" title="刪減行"><img src="${vcIcons.deleteRowBlue}"></button>
              <button class="vc-icon-btn${vtQuickFill ? ' active' : ''}" id="vtQuickFillToggle" title="OCR快速填入"><img src="${vtQuickFill ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>`
           : `<button class="vc-icon-btn" id="vtEditToggle" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
-        <button class="vc-icon-btn${vtShowOcr ? ' active' : ''}${vtQuickFill ? ' disabled' : ''}" id="vtShowOcrBtn" title="顯示OCR區域"><img src="${vtShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
+        <button class="vc-icon-btn${vtCopyOcr ? ' active' : ''}" id="vtCopyOcrToggle" title="複製OCR文字"><img src="${vtCopyOcr ? vcIcons.copyAmber : vcIcons.copyBlue}"></button>
+        <button class="vc-icon-btn${vtShowOcr ? ' active' : ''}${(vtQuickFill || vtCopyOcr) ? ' disabled' : ''}" id="vtShowOcrBtn" title="顯示OCR區域"><img src="${vtShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
         <button class="vc-icon-btn${vtShowText ? ' active' : ''}${!vtShowOcr ? ' disabled' : ''}" id="vtShowTextBtn" title="顯示OCR文字"><img src="${vtShowText ? vcIcons.textAmber : vcIcons.textBlue}"></button>
         <button class="vc-icon-btn${vtZoomMode ? ' active' : ''}" id="vtZoomToggle" title="放大檢視"><img src="${vtZoomMode ? vcIcons.zoomAmber : vcIcons.zoomBlue}"></button>
         <button class="vc-icon-btn" id="vtExportCfg" title="匯出config.json"><img src="${vcIcons.cfgBlue}"></button>
@@ -4102,7 +4115,8 @@
           }
           vtEditMode = false;
           vtQuickFill = false;
-          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode');
+          vtCopyOcr = false;
+          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode', 'vt-copy-ocr-mode');
           vtRenderPageNav();
           vtRenderTable();
           vtRenderAreaOverlays();
@@ -4110,7 +4124,8 @@
         document.getElementById('vtEditCancel')?.addEventListener('click', () => {
           vtEditMode = false;
           vtQuickFill = false;
-          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode');
+          vtCopyOcr = false;
+          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode', 'vt-copy-ocr-mode');
           vtRenderPageNav();
           vtRenderTable();
         });
@@ -4166,11 +4181,30 @@
       document.getElementById('vtQuickFillToggle')?.addEventListener('click', () => {
         vtQuickFill = !vtQuickFill;
         if (vtQuickFill) {
+          // Auto-close copy OCR
+          vtCopyOcr = false;
+          document.getElementById('vtImageContainer')?.classList.remove('vt-copy-ocr-mode');
           vtShowOcr = true;
         } else {
           vtShowOcr = false;
         }
         document.getElementById('vtImageContainer').classList.toggle('vt-quickfill-mode', vtQuickFill);
+        vtRenderPageNav();
+        vtRenderAreaOverlays();
+      });
+      // VT Copy OCR toggle
+      document.getElementById('vtCopyOcrToggle')?.addEventListener('click', () => {
+        vtCopyOcr = !vtCopyOcr;
+        if (vtCopyOcr) {
+          // Auto-close quick fill
+          vtQuickFill = false;
+          vtCopyOcr = false;
+          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode', 'vt-copy-ocr-mode');
+          vtShowOcr = true;
+        } else {
+          vtShowOcr = false;
+        }
+        document.getElementById('vtImageContainer').classList.toggle('vt-copy-ocr-mode', vtCopyOcr);
         vtRenderPageNav();
         vtRenderAreaOverlays();
       });
@@ -4665,7 +4699,8 @@
           await loadDataAnswersList();
           vtEditMode = false;
           vtQuickFill = false;
-          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode');
+          vtCopyOcr = false;
+          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode', 'vt-copy-ocr-mode');
           vtRenderPageNav();
           vtRenderTable();
           alert(`答案「${finalName}」已儲存`);
@@ -4676,7 +4711,8 @@
       document.getElementById('vtRevertEdit2')?.addEventListener('click', () => {
         vtEditMode = false;
         vtQuickFill = false;
-        document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode');
+        vtCopyOcr = false;
+        document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode', 'vt-copy-ocr-mode');
         vtRenderPageNav();
         vtRenderTable();
       });
@@ -4814,6 +4850,21 @@
       vtHighlightItems([{ x: areaX, y: areaY, w: areaW, h: areaH, regNdx: areaP }]);
     });
 
+    // VT Copy OCR text: delegated click on area overlays
+    document.getElementById('vtImageContainer').addEventListener('click', (e) => {
+      if (!vtCopyOcr) return;
+      const overlay = e.target.closest('.vt-area-overlay');
+      if (!overlay) return;
+      const text = overlay.dataset.ocrText;
+      if (!text) return;
+      e.stopPropagation();
+      e.preventDefault();
+      copyToClipboard(text).then(() => {
+        overlay.style.background = 'rgba(59, 130, 246, 0.4)';
+        setTimeout(() => { overlay.style.background = ''; }, 200);
+      });
+    });
+
     // VT drag to pan (only in zoom mode)
     let vtDragging = false, vtDragX = 0, vtDragY = 0, vtScrollX = 0, vtScrollY = 0;
     document.getElementById('vtImageViewport')?.addEventListener('mousedown', (e) => {
@@ -4913,7 +4964,8 @@
         await loadDataAnswersList();
         vtEditMode = false;
         vtQuickFill = false;
-        document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode');
+        vtCopyOcr = false;
+        document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode', 'vt-copy-ocr-mode');
         document.getElementById('vtSaveBar').style.display = 'none';
         vtRenderPageNav();
         vtRenderTable();
@@ -4924,7 +4976,8 @@
     document.getElementById('vtRevertEdit')?.addEventListener('click', () => {
       vtEditMode = false;
       vtQuickFill = false;
-      document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode');
+      vtCopyOcr = false;
+      document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode', 'vt-copy-ocr-mode');
       document.getElementById('vtSaveBar').style.display = 'none';
       vtRenderPageNav();
       vtRenderTable();
