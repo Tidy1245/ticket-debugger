@@ -2314,7 +2314,7 @@
         const val = el.querySelector('.vc-field-value')?.textContent || '';
         if (areas[fi]) areas[fi].text = val;
       });
-      // Sync table cells (skip new rows — VC DOM indices may be stale after TD row insertion)
+      // Sync table cells
       document.querySelectorAll('#vcTableContent .vc-field-item[data-type="cell"]').forEach(el => {
         const ri = parseInt(el.dataset.ri);
         const ci = parseInt(el.dataset.ci);
@@ -2323,7 +2323,6 @@
         const headers = tables[0].headers || [];
         const h = headers[ci];
         if (h && tables[0].rows[ri][h.key]) {
-          if (tables[0].rows[ri][h.key]._isNewRow) return;
           tables[0].rows[ri][h.key].text = val;
         }
       });
@@ -2333,10 +2332,10 @@
     async function exportConfigJson() {
       if (!currentTicket || !ticketData) return;
       try {
-        // Sync any pending DOM edits from all tabs
-        syncTableDomToData();
-        syncVcDomToData();
-        syncVtDomToData();
+        // Sync only the active tab (other tabs' DOM may be stale after row add/delete)
+        if (prevActiveTab === 'table') syncTableDomToData();
+        else if (prevActiveTab === 'visual') syncVcDomToData();
+        else if (prevActiveTab === 'vtable') syncVtDomToData();
 
         // Fetch raw config
         const config = await fetchJSON(`/api/tickets/${currentTicket}/config`);
@@ -4889,7 +4888,6 @@
         const tables = ticketData.tables || [];
         const cell = tables[0]?.rows?.[ri]?.[key];
         if (cell) {
-          if (cell._isNewRow) return; // skip new rows — VT DOM indices may be stale
           cell.text = td.textContent;
           // Clear location data if text fully deleted
           if (!td.textContent.trim()) {
