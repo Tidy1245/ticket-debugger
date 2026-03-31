@@ -4198,8 +4198,7 @@
         if (vtCopyOcr) {
           // Auto-close quick fill
           vtQuickFill = false;
-          vtCopyOcr = false;
-          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode', 'vt-copy-ocr-mode');
+          document.getElementById('vtImageContainer')?.classList.remove('vt-quickfill-mode');
           vtShowOcr = true;
         } else {
           vtShowOcr = false;
@@ -4860,7 +4859,7 @@
       e.stopPropagation();
       e.preventDefault();
       copyToClipboard(text).then(() => {
-        overlay.style.background = 'rgba(59, 130, 246, 0.4)';
+        overlay.style.background = 'rgba(245, 158, 11, 0.4)';
         setTimeout(() => { overlay.style.background = ''; }, 200);
       });
     });
