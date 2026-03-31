@@ -2314,7 +2314,7 @@
         const val = el.querySelector('.vc-field-value')?.textContent || '';
         if (areas[fi]) areas[fi].text = val;
       });
-      // Sync table cells
+      // Sync table cells (skip new rows — VC DOM indices may be stale after TD row insertion)
       document.querySelectorAll('#vcTableContent .vc-field-item[data-type="cell"]').forEach(el => {
         const ri = parseInt(el.dataset.ri);
         const ci = parseInt(el.dataset.ci);
@@ -2323,6 +2323,7 @@
         const headers = tables[0].headers || [];
         const h = headers[ci];
         if (h && tables[0].rows[ri][h.key]) {
+          if (tables[0].rows[ri][h.key]._isNewRow) return;
           tables[0].rows[ri][h.key].text = val;
         }
       });
@@ -4888,6 +4889,7 @@
         const tables = ticketData.tables || [];
         const cell = tables[0]?.rows?.[ri]?.[key];
         if (cell) {
+          if (cell._isNewRow) return; // skip new rows — VT DOM indices may be stale
           cell.text = td.textContent;
           // Clear location data if text fully deleted
           if (!td.textContent.trim()) {
