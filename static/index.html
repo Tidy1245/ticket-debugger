@@ -326,18 +326,23 @@
     .vc-icon-btn:hover { border-color: var(--accent-blue); }
     .vc-icon-btn.active { border-color: var(--accent-amber); background: rgba(245, 158, 11, 0.08); }
     .vc-icon-btn.disabled { opacity: 0.3; pointer-events: none; }
-    .vc-copy-ocr-mode .vc-area-overlay { cursor: copy; }
+    .vc-copy-ocr-mode .vc-area-overlay {
+      cursor: copy;
+      animation: ocr-copy-glow 1.5s ease-in-out infinite;
+    }
     .vt-copy-ocr-mode .vt-area-overlay {
       cursor: copy;
       animation: ocr-copy-glow 1.5s ease-in-out infinite;
     }
-    .vt-quickfill-mode .vt-area-overlay {
+    .vt-quickfill-mode .vt-area-overlay,
+    .vt-quickfill-mode .vc-area-overlay {
       cursor: crosshair;
       border-color: rgba(34, 197, 94, 0.8) !important;
       background: rgba(34, 197, 94, 0.1) !important;
       animation: ocr-glow 1.5s ease-in-out infinite;
     }
-    .vt-quickfill-mode .vt-area-overlay:hover {
+    .vt-quickfill-mode .vt-area-overlay:hover,
+    .vt-quickfill-mode .vc-area-overlay:hover {
       background: rgba(34, 197, 94, 0.25) !important;
     }
     .vt-resize-handle { width: 5px; cursor: col-resize; background: var(--border); transition: background 0.15s; flex-shrink: 0; border-radius: 3px; }
@@ -671,6 +676,7 @@
       opacity: 0.4;
     }
     td.locatable:hover::after { opacity: 0.8; }
+    td.locatable.no-dot::after { display: none; }
     td.cell-active { background: rgba(245, 158, 11, 0.15) !important; }
     .area-tooltip {
       position: fixed;
@@ -2539,7 +2545,10 @@
               const hasAreaList = cell.areaList && cell.areaList.length > 0;
               const hasSingleLoc = cell.regNdx != null && !(cell.x === 0 && cell.y === 0 && cell.w === 1 && cell.h === 1) && (cell.w > 0 && cell.h > 0);
               const hasLoc = hasAreaList || hasSingleLoc;
-              if (hasLoc && !tableEditMode && tipMode === 'cell') cellClass += ' locatable';
+              if (hasLoc && !tableEditMode) {
+                cellClass += ' locatable';
+                if (tipMode !== 'cell') cellClass += ' no-dot';
+              }
 
               let content;
               const esc = tableShowNewlines ? escHtmlNl : escHtml;
@@ -3153,6 +3162,7 @@
     let vcShowText = false;
     let vcEditMode = false;
     let vcCopyOcr = false;
+    let vcQuickFill = false;
     let vcZoomMode = false;
     let vcZoomLevel = 1;
     let vcSearchQuery = '';
@@ -3186,6 +3196,7 @@
       vcActiveGroupIdx = -1;
       vcEditMode = false;
       vcCopyOcr = false;
+      vcQuickFill = false;
       vcShowOcr = false;
       vcShowText = false;
       vcSearchQuery = '';
@@ -3238,10 +3249,13 @@
         ${vcEditMode
           ? `<button class="vc-icon-btn active" id="vcEditConfirm" title="確認編輯"><img src="${vcIcons.confirmGreen}"></button>
              <button class="vc-icon-btn" id="vcEditCancel" title="取消編輯"><img src="${vcIcons.cancelRed}"></button>
-             <button class="vc-icon-btn" id="vcEditSave" title="另存答案"><img src="${vcIcons.savePurple}"></button>`
+             <button class="vc-icon-btn" id="vcEditSave" title="另存答案"><img src="${vcIcons.savePurple}"></button>
+             <button class="vc-icon-btn" id="vcAddRow" title="新增行"><img src="${vcIcons.addRowBlue}"></button>
+             <button class="vc-icon-btn" id="vcDeleteRow" title="刪減行"><img src="${vcIcons.deleteRowBlue}"></button>
+             <button class="vc-icon-btn${vcQuickFill ? ' active' : ''}" id="vcQuickFillToggle" title="OCR快速填入"><img src="${vcQuickFill ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>`
           : `<button class="vc-icon-btn" id="vcEditToggle" title="編輯模式"><img src="${vcIcons.editBlue}"></button>`}
-        <button class="vc-icon-btn${vcCopyOcr ? ' active' : ''}" id="vcCopyOcrToggle" title="複製OCR文字"><img src="${vcCopyOcr ? vcIcons.qeAmber : vcIcons.qeBlue}"></button>
-        <button class="vc-icon-btn${vcShowOcr ? ' active' : ''}${vcCopyOcr ? ' disabled' : ''}" id="vcShowOcrBtn" title="顯示OCR區域"><img src="${vcShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
+        <button class="vc-icon-btn${vcCopyOcr ? ' active' : ''}" id="vcCopyOcrToggle" title="複製OCR文字"><img src="${vcCopyOcr ? vcIcons.copyAmber : vcIcons.copyBlue}"></button>
+        <button class="vc-icon-btn${vcShowOcr ? ' active' : ''}${(vcCopyOcr || vcQuickFill) ? ' disabled' : ''}" id="vcShowOcrBtn" title="顯示OCR區域"><img src="${vcShowOcr ? vcIcons.ocrAmber : vcIcons.ocrBlue}"></button>
         <button class="vc-icon-btn${vcShowText ? ' active' : ''}${!vcShowOcr ? ' disabled' : ''}" id="vcShowTextBtn" title="顯示OCR文字"><img src="${vcShowText ? vcIcons.textAmber : vcIcons.textBlue}"></button>
         <button class="vc-icon-btn${vcZoomMode ? ' active' : ''}" id="vcZoomToggle" title="放大檢視"><img src="${vcZoomMode ? vcIcons.zoomAmber : vcIcons.zoomBlue}"></button>
         <button class="vc-icon-btn${vcSegment ? ' active' : ''}" id="vcSegToggle" title="長字分段"><img src="${vcSegment ? vcIcons.segAmber : vcIcons.segBlue}"></button>
@@ -3297,18 +3311,89 @@
         // Edit mode active: confirm / cancel / save-as-answer
         document.getElementById('vcEditConfirm').addEventListener('click', () => {
           syncVcDomToData();
+          // Remove empty new rows
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const headers = tables[0]?.headers || [];
+          for (let i = allRows.length - 1; i >= 0; i--) {
+            const row = allRows[i];
+            const isNew = headers.some(h => row[h.key]?._isNewRow);
+            if (isNew) {
+              const allEmpty = headers.every(h => !(row[h.key]?.text || '').trim());
+              if (allEmpty) allRows.splice(i, 1);
+              else headers.forEach(h => { if (row[h.key]) delete row[h.key]._isNewRow; });
+            }
+          }
           vcEditMode = false;
+          vcQuickFill = false;
+          document.getElementById('vcImageContainer')?.classList.remove('vt-quickfill-mode');
           vcRenderPageNav();
           vcRenderAreaOverlays();
-          document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => el.removeAttribute('contenteditable'));
+          vcRenderTable();
         });
         document.getElementById('vcEditCancel').addEventListener('click', () => {
           vcEditMode = false;
+          vcQuickFill = false;
+          document.getElementById('vcImageContainer')?.classList.remove('vt-quickfill-mode');
           vcRenderPageNav();
           vcRenderTable();
         });
         document.getElementById('vcEditSave').addEventListener('click', () => {
           document.getElementById('vcSaveAsAnswer')?.click();
+        });
+        // VC Add row
+        document.getElementById('vcAddRow')?.addEventListener('click', () => {
+          syncVcDomToData();
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const total = allRows.length;
+          const input = prompt(`插入新行於第幾項之後？（1~${total}，輸入 0 表示插入在最前面）`);
+          if (input === null) return;
+          const n = Number(input);
+          if (!Number.isInteger(n) || n < 0 || n > total) {
+            alert(`請輸入 0~${total} 的整數`);
+            return;
+          }
+          const headers = tables[0]?.headers || [];
+          const emptyRow = {};
+          headers.forEach(h => {
+            emptyRow[h.key] = { text: '', textModify: '', x: 0, y: 0, w: 1, h: 1, regNdx: 0, _isNewRow: true };
+          });
+          allRows.splice(n, 0, emptyRow);
+          vcRenderTable();
+          if (vcEditMode) document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => { el.contentEditable = 'true'; });
+        });
+        // VC Delete row
+        document.getElementById('vcDeleteRow')?.addEventListener('click', () => {
+          syncVcDomToData();
+          const tables = ticketData?.tables || [];
+          const allRows = tables[0]?.rows || [];
+          const total = allRows.length;
+          if (total === 0) { alert('沒有可刪除的行'); return; }
+          const input = prompt(`刪除第幾項？（1~${total}）`);
+          if (input === null) return;
+          const n = Number(input);
+          if (!Number.isInteger(n) || n < 1 || n > total) {
+            alert(`請輸入 1~${total} 的整數`);
+            return;
+          }
+          allRows.splice(n - 1, 1);
+          vcRenderTable();
+          if (vcEditMode) document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => { el.contentEditable = 'true'; });
+        });
+        // VC Quick Fill toggle
+        document.getElementById('vcQuickFillToggle')?.addEventListener('click', () => {
+          vcQuickFill = !vcQuickFill;
+          if (vcQuickFill) {
+            vcCopyOcr = false;
+            document.getElementById('vcImageContainer')?.classList.remove('vc-copy-ocr-mode');
+            vcShowOcr = true;
+          } else {
+            vcShowOcr = false;
+          }
+          document.getElementById('vcImageContainer').classList.toggle('vt-quickfill-mode', vcQuickFill);
+          vcRenderPageNav();
+          vcRenderAreaOverlays();
         });
       } else {
         document.getElementById('vcEditToggle').addEventListener('click', () => {
@@ -3323,6 +3408,8 @@
       document.getElementById('vcCopyOcrToggle').addEventListener('click', () => {
         vcCopyOcr = !vcCopyOcr;
         if (vcCopyOcr) {
+          vcQuickFill = false;
+          document.getElementById('vcImageContainer')?.classList.remove('vt-quickfill-mode');
           vcShowOcr = true;
         } else {
           vcShowOcr = false;
@@ -3476,6 +3563,11 @@
           div.appendChild(label);
         }
         if (area.text) div.dataset.ocrText = area.text;
+        div.dataset.areaX = area.x;
+        div.dataset.areaY = area.y;
+        div.dataset.areaW = area.w;
+        div.dataset.areaH = area.h;
+        div.dataset.areaP = area.regNdx != null ? area.regNdx : vcPageIndex;
         div.addEventListener('mouseenter', (e) => showAreaTooltip(e, area));
         div.addEventListener('mouseleave', hideAreaTooltip);
         container.appendChild(div);
@@ -3878,6 +3970,48 @@
       });
     });
 
+    // VC OCR Quick Fill: delegated click on area overlays
+    document.getElementById('vcImageContainer').addEventListener('click', async (e) => {
+      if (!vcQuickFill) return;
+      const overlay = e.target.closest('.vc-area-overlay');
+      if (!overlay) return;
+      const text = overlay.dataset.ocrText;
+      if (!text) return;
+      e.stopPropagation();
+      e.preventDefault();
+
+      const areaX = +overlay.dataset.areaX;
+      const areaY = +overlay.dataset.areaY;
+      const areaW = +overlay.dataset.areaW;
+      const areaH = +overlay.dataset.areaH;
+      const areaP = parseInt(overlay.dataset.areaP);
+
+      const result = await showQuickFillDialog(text);
+      if (!result) return;
+
+      syncVcDomToData();
+      const rows = ticketData.tables?.[0]?.rows || [];
+      const targetRow = rows[result.row];
+      if (!targetRow) { alert('找不到指定行'); return; }
+
+      if (targetRow[result.key]) {
+        targetRow[result.key].text = text;
+        targetRow[result.key].x = areaX;
+        targetRow[result.key].y = areaY;
+        targetRow[result.key].w = areaW;
+        targetRow[result.key].h = areaH;
+        targetRow[result.key].regNdx = areaP;
+      } else {
+        targetRow[result.key] = { text, textModify: '', x: areaX, y: areaY, w: areaW, h: areaH, regNdx: areaP };
+      }
+
+      overlay.style.background = 'rgba(34, 197, 94, 0.4)';
+      setTimeout(() => { overlay.style.background = ''; }, 200);
+
+      vcRenderTable();
+      if (vcEditMode) document.querySelectorAll('#vcTableContent .vc-field-value').forEach(el => { el.contentEditable = 'true'; });
+    });
+
     // VC drag to pan (only in zoom mode)
     let vcDragging = false, vcDragX = 0, vcDragY = 0, vcScrollX = 0, vcScrollY = 0;
     document.getElementById('vcImageViewport')?.addEventListener('mousedown', (e) => {
@@ -4030,7 +4164,7 @@
           });
         }).length;
       }
-      const rowInfo = q ? `${filteredCount}/${allRows.length} rows` : `${allRows.length} rows`;
+      const rowInfo = q ? `${filteredCount}/${allRows.length} 組` : `${allRows.length} 組`;
 
       nav.innerHTML = `
         <button class="page-arrow" id="vtPrev" ${vtPageIndex <= 0 ? 'disabled' : ''}><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -4722,7 +4856,7 @@
       const filteredCount2 = q ? el.querySelectorAll('table tbody tr').length : allRows2.length;
       const rowInfoEl = document.getElementById('vtRowInfo');
       if (rowInfoEl) {
-        rowInfoEl.textContent = q ? `${filteredCount2}/${allRows2.length} rows` : `${allRows2.length} rows`;
+        rowInfoEl.textContent = q ? `${filteredCount2}/${allRows2.length} 組` : `${allRows2.length} 組`;
       }
     }
 
