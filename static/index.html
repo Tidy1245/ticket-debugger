@@ -2636,7 +2636,6 @@
             if (isNew) {
               const allEmpty = headers.every(h => !(row[h.key]?.text || '').trim());
               if (allEmpty) allRows.splice(i, 1);
-              else headers.forEach(h => { if (row[h.key]) delete row[h.key]._isNewRow; });
             }
           }
           tableEditMode = false;
@@ -2784,7 +2783,6 @@
             if (isNew) {
               const allEmpty = cleanHeaders.every(h => !(r[h.key]?.text || '').trim());
               if (allEmpty) cleanRows.splice(i, 1);
-              else cleanHeaders.forEach(h => { if (r[h.key]) delete r[h.key]._isNewRow; });
             }
           }
           tableEditMode = false;
@@ -3345,7 +3343,6 @@
             if (isNew) {
               const allEmpty = headers.every(h => !(row[h.key]?.text || '').trim());
               if (allEmpty) allRows.splice(i, 1);
-              else headers.forEach(h => { if (row[h.key]) delete row[h.key]._isNewRow; });
             }
           }
           vcEditMode = false;
@@ -4268,7 +4265,6 @@
             if (isNew) {
               const allEmpty = headers.every(h => !(row[h.key]?.text || '').trim());
               if (allEmpty) allRows.splice(i, 1);
-              else headers.forEach(h => { if (row[h.key]) delete row[h.key]._isNewRow; });
             }
           }
           vtEditMode = false;
