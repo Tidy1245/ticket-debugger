@@ -100,24 +100,8 @@ http://localhost:9020
 - **來源標籤**：`manual` / `visual-check` / `vlm-answer`
 - Fields 編輯器（key-value）+ Table 編輯器（contenteditable 表格）
 
----
-
-## 如何在 README 放上小動畫？
-
-### 方法一：錄製 GIF（最簡單）
-
-推薦工具：
-
-| 工具 | 平台 | 免費 |
-|------|------|------|
-| **[ScreenToGif](https://www.screentogif.com/)** | Windows | 是 |
-| **[Kap](https://getkap.co/)** | macOS | 是 |
-| **[LICEcap](https://www.cockos.com/licecap/)** | Win/Mac | 是 |
-
-錄製後放到專案的 `docs/` 資料夾，在 README 用：
-
 ```markdown
-![功能展示](docs/demo-visual-check.gif)
+[![功能展示](docs/demo-visual-check.gif)](https://github.com/user-attachments/assets/08531c99-4c2d-4ab3-bee1-8491484aa35d)
 ```
 
 ---
