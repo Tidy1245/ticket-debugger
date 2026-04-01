@@ -102,7 +102,7 @@ http://localhost:9020
 
 ---
 #### 功能展示
-https://github.com/user-attachments/assets/xxx.mp4
+[https://github.com/user-attachments/assets/xxx.mp4](https://github.com/Tidy1245/ticket-debugger/issues/1#issue-4185383584)
 
 ## 架構
 
