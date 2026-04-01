@@ -100,42 +100,9 @@ http://localhost:9020
 - **來源標籤**：`manual` / `visual-check` / `vlm-answer`
 - Fields 編輯器（key-value）+ Table 編輯器（contenteditable 表格）
 
-```markdown
-[![功能展示](docs/demo-visual-check.gif)](https://github.com/user-attachments/assets/08531c99-4c2d-4ab3-bee1-8491484aa35d)
-```
-
 ---
-
-### 方法二：錄製 MP4 → 上傳 GitHub
-
-GitHub README 支援直接嵌入影片（`.mp4`、`.webm`）：
-
-1. 在 GitHub issue 或 PR 的編輯框**直接拖曳 MP4 檔案**
-2. GitHub 會自動上傳並產生連結如 `https://github.com/user-attachments/assets/xxx.mp4`
-3. 複製連結貼到 README：
-
-```markdown
+#### 功能展示
 https://github.com/user-attachments/assets/xxx.mp4
-```
-
-GitHub 會自動渲染為可播放的影片。
-
----
-
-### 方法三：使用 asciinema（純 CLI 操作展示）
-
-若要展示 server 啟動等 terminal 操作，可用 [asciinema](https://asciinema.org/) 錄製並嵌入。
-
----
-
-### 建議的 GIF 規格
-
-- 解析度：1280×720 或 1920×1080 縮小至 960×540
-- 幀率：10–15 fps（檔案小，播放流暢）
-- 時長：每段 5–15 秒，聚焦單一功能
-- 工具推薦用 ScreenToGif 的「最佳化」功能壓縮到 < 5MB
-
----
 
 ## 架構
 
